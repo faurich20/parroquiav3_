@@ -1,0 +1,17 @@
+cd parroquia-backend
+python -m venv venv 
+venv\Scripts\activate
+
+pip install flask, flask-sqlalchemy, flask-migrate, flask-jwt-extended, flask-cors
+pip intall psycopg2,psycopg2-binary
+pip install python-dotenv
+pip install bcrypt
+pip install email-validator
+
+#pip install python-dateutil NOTE: No se usa
+
+#para crear la base de datos
+python scripts/init_db.py
+
+#para que ejecutes el backend
+python run.py

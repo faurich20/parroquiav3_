@@ -1,0 +1,259 @@
+/* src/styles/themes.css */
+/* Variables globales para temas (incluye surface-2 e input-bg para hover/inputs) */
+
+/* Default (claro) */
+:root {
+  --primary: #2563eb;
+  --secondary: #7c3aed;
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f3f4f6;
+  --input-bg: #f8fafc;
+  --text: #111827;
+  --text-strong: #111827; /* fuerte por defecto (oscuro) */
+  --muted: #6b7280;
+  --border: #e5e7eb;
+}
+
+/* Azul */
+[data-theme="blue"] {
+  --primary: #2563eb;
+  --secondary: #7c3aed;
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f3f4f6;
+  --input-bg: #f8fafc;
+  --text: #111827;
+  --text-strong: var(--primary); /* azul vivo */
+  --muted: #6b7280;
+  --border: #e5e7eb;
+}
+
+/* Verde */
+[data-theme="green"] {
+  --primary: #16a34a;
+  --secondary: #22c55e;
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f3f9f1;
+  --input-bg: #f8fafc;
+  --text: #111827;
+  --text-strong: var(--primary);
+  --muted: #6b7280;
+  --border: #e6f4ea;
+}
+
+/* Morado */
+[data-theme="purple"] {
+  --primary: #7c3aed;
+  --secondary: #8b5cf6;
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f6f3ff;
+  --input-bg: #f8fafc;
+  --text: #111827;
+  --text-strong: var(--primary);
+  --muted: #6b7280;
+  --border: #efeaff;
+}
+
+/* Vino */
+[data-theme="wine"] {
+  --primary: #7f1d1d;
+  --secondary: #9f1239;
+  --bg: #fff1f2;
+  --surface: #ffffff;
+  --surface-2: #fff5f6;
+  --input-bg: #fff7f8;
+  --text: #111827;
+  --text-strong: #7f1d1d; /* contraste alto para fondos oscuros si se usan */
+  --muted: #6b7280;
+  --border: #f3e8e8;
+}
+
+/* Rojo */
+[data-theme="red"] {
+  --primary: #dc2626;
+  --secondary: #ef4444;
+  --bg: #fef2f2;
+  --surface: #ffffff;
+  --surface-2: #fff5f5;
+  --input-bg: #fff7f7;
+  --text: #111827;
+  --text-strong: var(--primary);
+  --muted: #6b7280;
+  --border: #fde4e4;
+}
+
+/* Celeste (sky) */
+[data-theme="sky"] {
+  --primary: #0ea5e9;
+  --secondary: #22d3ee;
+  --bg: #f0f9ff;
+  --surface: #ffffff;
+  --surface-2: #effcff;
+  --input-bg: #f0f9ff;
+  --text: #0f172a;
+  --text-strong: var(--primary);
+  --muted: #64748b;
+  --border: #e2f2fb;
+}
+
+/* Negro (tema oscuro) */
+[data-theme="black"] {
+  --primary: #06b6d4;
+  --secondary: #6366f1;
+  --bg: #0b1220;
+  --surface: #0f1724;
+  --surface-2: #111827;
+  --input-bg: #071123;
+  --text: #e6eef8;
+  --text-strong: #ffffff; /* blanco puro para contraste */
+  --muted: #9aa6b2;
+  --border: #182031;
+}
+
+/* Amarillo */
+[data-theme="yellow"] {
+  --primary: #eab308;
+  --secondary: #f59e0b;
+  --bg: #fffbeb;
+  --surface: #ffffff;
+  --surface-2: #fffbdb;
+  --input-bg: #fffaf0;
+  --text: #1f2937;
+  --text-strong: var(--primary);
+  --muted: #6b7280;
+  --border: #fce7a8;
+}
+
+/* Marrón */
+[data-theme="brown"] {
+  --primary: #92400e;
+  --secondary: #b45309;
+  --bg: #fffbeb;
+  --surface: #ffffff;
+  --surface-2: #fff6ed;
+  --input-bg: #fff7f3;
+  --text: #1f2937;
+  --text-strong: #92400e; /* blanco si usas surfaces oscuras */
+  --muted: #6b7280;
+  --border: #f5e6d3;
+}
+
+/* Blanco (neutro claro) */
+[data-theme="white"] {
+  --primary: #0ea5e9;
+  --secondary: #7c3aed;
+  --bg: #ffffff;
+  --surface: #f9fafb;
+  --surface-2: #f3f4f6;
+  --input-bg: #ffffff;
+  --text: #0f172a;
+  --text-strong: #111827;
+  --muted: #6b7280;
+  --border: #e6eefb;
+}
+
+/* Gris */
+[data-theme="gray"] {
+  --primary: #6b7280;
+  --secondary: #9ca3af;
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --input-bg: #f8fafc;
+  --text: #111827;
+  --text-strong: #111827;
+  --muted: #6b7280;
+  --border: #d1d5db;
+}
+
+/* Teal */
+[data-theme="teal"] {
+  --primary: #0d9488;
+  --secondary: #14b8a6;
+  --bg: #f0fdfa;
+  --surface: #ffffff;
+  --surface-2: #f3fffb;
+  --input-bg: #f8fffe;
+  --text: #0f172a;
+  --text-strong: var(--primary);
+  --muted: #64748b;
+  --border: #dffbf9;
+}
+
+/* Indigo */
+[data-theme="indigo"] {
+  --primary: #4f46e5;
+  --secondary: #6366f1;
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f4f3ff;
+  --input-bg: #fbfbff;
+  --text: #111827;
+  --text-strong: var(--primary);
+  --muted: #6b7280;
+  --border: #e9e7ff;
+}
+
+/* Pink */
+[data-theme="pink"] {
+  --primary: #ec4899;
+  --secondary: #f472b6;
+  --bg: #fff5f9;
+  --surface: #ffffff;
+  --surface-2: #fff0f6;
+  --input-bg: #fff7fb;
+  --text: #111827;
+  --text-strong: var(--primary);
+  --muted: #6b7280;
+  --border: #ffe1f0;
+}
+
+/* Orange */
+[data-theme="orange"] {
+  --primary: #f97316;
+  --secondary: #fb923c;
+  --bg: #fff7ed;
+  --surface: #ffffff;
+  --surface-2: #fff4e6;
+  --input-bg: #fffaf2;
+  --text: #111827;
+  --text-strong: var(--primary);
+  --muted: #6b7280;
+  --border: #ffedd5;
+}
+
+/* Cyan */
+[data-theme="cyan"] {
+  --primary: #06b6d4;
+  --secondary: #0891b2;
+  --bg: #ecfeff;
+  --surface: #ffffff;
+  --surface-2: #f0feff;
+  --input-bg: #f6ffff;
+  --text: #0f172a;
+  --text-strong: var(--primary);
+  --muted: #64748b;
+  --border: #ddfbfe;
+}
+
+/* ================================
+   Utilidades globales de tipografía
+   ================================ */
+
+/* Texto principal fuerte (para títulos, headers, KPIs) */
+.text-strong {
+  color: var(--text-strong) !important;
+}
+
+/* Texto normal (para párrafos o contenido principal) */
+.text-normal {
+  color: var(--text) !important;
+}
+
+/* Texto secundario, descripciones o hints */
+.text-muted {
+  color: var(--muted) !important;
+}

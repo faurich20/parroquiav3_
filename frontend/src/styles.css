@@ -1,0 +1,82 @@
+/* src/styles.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* importa las variables/paletas */
+@import "./styles/themes.css";
+
+/* ================================
+   Reglas globales para prevenir conflictos
+   ================================ */
+
+/* Asegurar que body y root no tengan márgenes/paddings que afecten modales */
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+#root {
+  position: relative;
+  min-height: 100vh;
+}
+
+/* Prevenir scroll cuando un modal está abierto */
+body.modal-open {
+  overflow: hidden;
+}
+
+/* ================================
+   Estilos base para modales
+   ================================ */
+
+/* Asegurar que los modales con position: fixed cubran toda la ventana */
+.modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  z-index: 9999 !important;
+}
+
+/* ================================
+   Utilidades para scroll personalizado
+   ================================ */
+
+/* Scrollbar personalizado para navegadores webkit */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--surface-2);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* ================================
+   Animaciones suaves globales
+   ================================ */
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Transiciones suaves para cambios de tema */
+:root {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
