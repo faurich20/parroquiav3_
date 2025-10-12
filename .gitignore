@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.cache/
+.venv/
+venv/
+env/
+.python-version
+
+# Node
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/
+dist/
+build/
+.next/
+.nuxt/
+.turbo/
+
+# Project structure
+backend/venv/
+backend/.venv/
+frontend/node_modules/
+
+# Environments / secrets
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
