@@ -1,4 +1,4 @@
-cd parroquia-frontend
+cd frontend
 
 python -m venv venv   
 
