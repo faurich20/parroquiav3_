@@ -1,10 +1,13 @@
 // parroquia-frontend/src/pages/Security/Permissions.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Settings, Search, Save, Loader, User, Check, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
+import { ETIQUETAS_PERMISOS } from '../../constants/permissions';
+import useCatalogoPermisos from '../../hooks/useCatalogoPermisos';
 
 const PermissionsPage = () => {
     const [users, setUsers] = useState([]);
@@ -16,22 +19,20 @@ const PermissionsPage = () => {
     const [message, setMessage] = useState({ type: '', text: '' });
 
     const { authFetch } = useAuth();
+    const { theme } = useTheme();
+    const isDarkTheme = theme === 'black';
 
-    // Definición de permisos disponibles
-    const availablePermissions = [
-        { id: 'dashboard', name: 'Menu Principal', description: 'Acceso al panel principal' },
-        { id: 'security', name: 'Seguridad', description: 'Gestión de usuarios, roles y permisos' },
-        { id: 'personal', name: 'Personal', description: 'Gestión de personal y empleados' },
-        { id: 'liturgical', name: 'Litúrgico', description: 'Gestión de actos litúrgicos' },
-        { id: 'accounting', name: 'Contabilidad', description: 'Gestión contable y financiera' },
-        { id: 'sales', name: 'Ventas', description: 'Gestión de ventas y facturación' },
-        { id: 'purchases', name: 'Compras', description: 'Gestión de compras y proveedores' },
-        { id: 'warehouse', name: 'Almacén', description: 'Gestión de inventario' },
-        { id: 'configuration', name: 'Configuración', description: 'Configuración del sistema' },
-        { id: 'reports', name: 'Reportes', description: 'Generación de reportes' }
-    ];
+    const { ids: permissionsCatalog } = useCatalogoPermisos();
+
+    const availablePermissions = permissionsCatalog.map(id => ({
+        id,
+        name: ETIQUETAS_PERMISOS[id] || id,
+        description: `Acceso a ${ETIQUETAS_PERMISOS[id] || id}`
+    }));
 
     // Cargar usuarios
+    const didFetchRef = useRef(false);
+
     useEffect(() => {
         const fetchUsers = async () => {
             try {
@@ -52,8 +53,10 @@ const PermissionsPage = () => {
             }
         };
 
+        if (didFetchRef.current) return;
+        didFetchRef.current = true;
         fetchUsers();
-    }, [authFetch]);
+    }, []);
 
     // Seleccionar usuario y cargar sus permisos
     const handleSelectUser = (user) => {
@@ -79,13 +82,14 @@ const PermissionsPage = () => {
         setMessage({ type: '', text: '' });
 
         try {
+            const roleValue = typeof selectedUser.role === 'object' ? (selectedUser.role.name || selectedUser.role.id) : selectedUser.role;
             const response = await authFetch(`http://localhost:5000/api/users/${selectedUser.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: selectedUser.name,
                     email: selectedUser.email,
-                    role: selectedUser.role,
+                    role: roleValue,
                     permissions: permissions,
                     status: selectedUser.status
                 })
@@ -137,7 +141,7 @@ const PermissionsPage = () => {
                 {/* Panel izquierdo - Lista de usuarios */}
                 <Card>
                     <div className="p-4 border-b">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Seleccionar Usuario</h3>
+                        <h3 className={`text-lg font-semibold mb-4 ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>Seleccionar Usuario</h3>
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                             <input
@@ -156,7 +160,7 @@ const PermissionsPage = () => {
                                 <motion.div
                                     key={user.id}
                                     onClick={() => handleSelectUser(user)}
-                                    className={`p-4 border-b cursor-pointer transition-colors ${
+                                    className={`group p-4 border-b cursor-pointer transition-colors ${
                                         selectedUser?.id === user.id
                                             ? 'bg-blue-50 border-l-4 border-l-blue-600'
                                             : 'hover:bg-gray-50'
@@ -173,7 +177,15 @@ const PermissionsPage = () => {
                                             {user.name.charAt(0)}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="font-medium text-gray-900 truncate">{user.name}</p>
+                                            <p
+                                                className={`font-medium truncate ${
+                                                    selectedUser?.id === user.id
+                                                        ? 'text-gray-900'
+                                                        : (isDarkTheme ? 'text-white group-hover:text-gray-900' : 'text-gray-900')
+                                                }`}
+                                            >
+                                                {user.name}
+                                            </p>
                                             <p className="text-sm text-gray-500 truncate">{user.email}</p>
                                             <p className="text-xs text-gray-400 mt-1">
                                                 {user.permissions?.length || 0} permisos
@@ -209,7 +221,7 @@ const PermissionsPage = () => {
                                         <h3 className="text-xl font-bold text-gray-900">{selectedUser.name}</h3>
                                         <p className="text-gray-600">{selectedUser.email}</p>
                                         <span className="inline-block mt-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
-                                            {selectedUser.role}
+                                            {typeof selectedUser.role === 'object' ? (selectedUser.role.name || selectedUser.role.id || '') : selectedUser.role}
                                         </span>
                                     </div>
                                 </div>
@@ -236,7 +248,7 @@ const PermissionsPage = () => {
 
                                 {/* Grid de permisos */}
                                 <div>
-                                    <h4 className="text-lg font-semibold text-gray-900 mb-4">
+                                    <h4 className={`text-lg font-semibold mb-4 ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>
                                         Permisos de Acceso
                                     </h4>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -266,7 +278,7 @@ const PermissionsPage = () => {
                                                         </div>
                                                     </div>
                                                     <div className="flex-1">
-                                                        <p className="font-medium text-gray-900">
+                                                        <p className={`font-medium ${permissions.includes(perm.id) ? 'text-gray-900' : (isDarkTheme ? 'text-white' : 'text-gray-900')}`}>
                                                             {perm.name}
                                                         </p>
                                                         <p className="text-sm text-gray-600 mt-1">
@@ -280,13 +292,13 @@ const PermissionsPage = () => {
                                 </div>
 
                                 {/* Botón guardar */}
-                                <div className="mt-6 flex justify-end">
+                                <div className="mt-6">
                                     <motion.button
                                         onClick={handleSavePermissions}
                                         disabled={saving}
-                                        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 font-medium"
-                                        whileHover={{ scale: 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
+                                        className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
+                                        whileHover={{ scale: 1.01 }}
+                                        whileTap={{ scale: 0.99 }}
                                     >
                                         {saving ? (
                                             <Loader className="w-5 h-5 animate-spin" />
@@ -300,7 +312,7 @@ const PermissionsPage = () => {
                         ) : (
                             <div className="p-12 text-center">
                                 <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                                <h3 className={`text-lg font-semibold mb-2 ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>
                                     Selecciona un Usuario
                                 </h3>
                                 <p className="text-gray-600">

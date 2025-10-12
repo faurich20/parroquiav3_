@@ -1,0 +1,29 @@
+# Entornos virtuales
+venv/
+env/
+.venv/
+
+# Variables de entorno
+.env
+.env.local
+
+# Base de datos
+*.db
+*.sqlite3
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Migraciones (excepto el directorio vacío)
+migrations/versions/
+!migrations/versions/.gitkeep

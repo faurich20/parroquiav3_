@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Bell, Search, LogOut, User, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import ThemeMenu from './ThemeMenu';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 
@@ -9,6 +10,8 @@ const Header = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { theme } = useTheme();
+  const isDarkTheme = theme === 'black';
   const tieneNotificaciones = false; // cambia a tu lógica real
 
   // 📌 Mapa de nombres amigables para breadcrumbs
@@ -80,7 +83,7 @@ const Header = () => {
           <nav className="flex items-center text-sm font-medium space-x-2">
             <Link
               to="/bienvenida"
-              style={{ color: 'var(--primary)' }}
+              style={{ color: 'var(--text)' }}
               className="hover:underline"
             >
               Inicio
@@ -94,11 +97,18 @@ const Header = () => {
                 <span key={routeTo} className="flex items-center space-x-2">
                   <span style={{ color: 'var(--muted)' }}>/</span>
                   {isLast ? (
-                    <span style={{ color: 'var(--text)' }}>{label}</span>
+                    <Link
+                      to={routeTo}
+                      onClick={(e) => { e.preventDefault(); navigate(0); }}
+                      style={{ color: isDarkTheme ? '#3b82f6' : 'var(--primary)', fontWeight: 700 }}
+                      className="hover:underline"
+                    >
+                      {label}
+                    </Link>
                   ) : (
                     <Link
                       to={routeTo}
-                      style={{ color: 'var(--primary)' }}
+                      style={{ color: 'var(--text)' }}
                       className="hover:underline"
                     >
                       {label}

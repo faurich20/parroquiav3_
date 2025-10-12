@@ -151,8 +151,8 @@ const ProtectedRoutes = () => {
 
 const App = () => {
   return (
-    <AuthProvider>
-      <Router>
+    <Router>
+      <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginForm />} />
           <Route element={<ProtectedRoutes />}>
@@ -176,8 +176,8 @@ const App = () => {
             <Route path="/reportes/transaccionales" element={<TransactionReports />} />
           </Route>
         </Routes>
-      </Router>
-    </AuthProvider>
+      </AuthProvider>
+    </Router>
   );
 };
 

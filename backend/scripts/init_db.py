@@ -8,7 +8,6 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app import create_app, db
-from app.models import User
 
 class DatabaseManager:
     def __init__(self):
@@ -93,41 +92,50 @@ class DatabaseManager:
             return False
     
     def initialize_tables_and_data(self):
-        """Crea tablas e inserta datos iniciales"""
-        app = create_app()
-        
-        with app.app_context():
-            try:
-                print("📊 Creando tablas...")
-                db.create_all()
-                print("✅ Tablas creadas correctamente")
-                
-                # Crear usuario administrador
-                if not User.query.filter_by(email='admin@parroquia.com').first():
-                    admin = User(
-                        name='Administrador Principal',
-                        email='admin@parroquia.com',
-                        role='Admin',
-                        permissions=[
-                            'dashboard', 'security', 'personal', 'liturgical',
-                            'accounting', 'sales', 'purchases', 'warehouse',
-                            'configuration', 'reports'
-                        ]
-                    )
-                    admin.set_password('Admin123!')
-                    db.session.add(admin)
-                    db.session.commit()
-                    print("✅ Usuario admin creado: admin@parroquia.com / Admin123!")
-                else:
-                    print("✅ Usuario admin ya existe")
-                
-                return True
-                
-            except Exception as e:
-                print(f"❌ Error inicializando tablas: {e}")
-                import traceback
-                traceback.print_exc()
-                return False
+        """Ejecuta el SQL completo y deja que app/__init__.py haga el seed"""
+        sql_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'database_full.sql'))
+        if not os.path.exists(sql_path):
+            print(f"❌ No se encontró el archivo SQL: {sql_path}")
+            return False
+
+        # 1) Ejecutar el SQL estructural completo
+        try:
+            print(f"📄 Ejecutando SQL: {sql_path}")
+            with open(sql_path, 'r', encoding='utf-8') as f:
+                sql_content = f.read()
+
+            conn = psycopg2.connect(
+                host=self.db_config['host'],
+                port=self.db_config['port'],
+                user=self.db_config['user'],
+                password=self.db_config['password'],
+                database='parroquia_db'
+            )
+            conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+            cur = conn.cursor()
+            cur.execute("SET client_encoding TO 'UTF8'")
+            cur.execute(sql_content)
+            cur.close()
+            conn.close()
+            print("✅ SQL ejecutado correctamente")
+        except Exception as e:
+            print(f"❌ Error ejecutando SQL: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+        # 2) Dejar que create_app haga db.create_all() y el seed (usuario Admin + entidades)
+        try:
+            print("⚙️ Ejecutando create_app() para aplicar create_all y seed...")
+            app = create_app()
+            # create_app ya ejecuta db.create_all() y el seed dentro de su app_context
+            print("✅ Inicialización de app completada (create_all + seed)")
+            return True
+        except Exception as e:
+            print(f"❌ Error inicializando app/seed: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
 def main():
     print("=" * 60)

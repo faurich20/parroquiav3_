@@ -1,81 +1,3 @@
-# from flask import Flask, jsonify, request
-# from werkzeug.exceptions import HTTPException
-# from flask_sqlalchemy import SQLAlchemy
-# from flask_migrate import Migrate
-# from flask_jwt_extended import JWTManager
-# from flask_cors import CORS 
-# from dotenv import load_dotenv 
-# import os
-
-
-# db = SQLAlchemy()
-# migrate = Migrate()
-# jwt = JWTManager()
-# cors = CORS()
-
-# def create_app():
-#     app = Flask(__name__)
-#     load_dotenv()
-    
-#     # Configuración
-#     app.config.from_object('app.config.Config')
-    
-#     # Inicializar extensiones
-#     db.init_app(app)
-#     migrate.init_app(app, db)
-#     jwt.init_app(app)
-#     #cors.init_app(app, origins=app.config['CORS_ORIGINS'])
-#     cors = CORS(app, resources={
-#     r"/api/*": {
-#         "origins": app.config['CORS_ORIGINS'],
-#         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-#         "allow_headers": ["Content-Type", "Authorization", "Accept"],
-#         "expose_headers": ["Content-Type"],
-#         "supports_credentials": True,
-#         "max_age": 3600
-#     }
-#     })
-    
-#     # 🔥 MANEJADORES DE ERRORES
-#     @app.errorhandler(500)
-#     def internal_server_error(e):
-#         return jsonify({
-#             'error': 'Internal Server Error', 
-#             'message': 'Error interno del servidor',
-#             'details': str(e) if app.debug else 'Contacte al administrador'
-#         }), 500
-    
-#     @app.errorhandler(Exception)
-#     def handle_exception(e):
-#         if isinstance(e, HTTPException):
-#             return e
-        
-#         return jsonify({
-#             'error': 'Internal Server Error', 
-#             'message': 'Error inesperado en el servidor',
-#             'details': str(e) if app.debug else 'Contacte al administrador'
-#         }), 500
-    
-#     # Middleware de debug
-#     @app.before_request
-#     def log_request_info():
-#         if request.path.startswith('/api/'):
-#             print(f"🌐 Request: {request.method} {request.path}")
-#             print(f"   Content-Type: {request.content_type}")
-#             print(f"   Headers: {dict(request.headers)}")
-#             if request.get_data():
-#                 print(f"   Body: {request.get_data(as_text=True)}")
-    
-#     # Registrar blueprints
-#     from app.routes.auth import auth_bp
-#     from app.routes.users import users_bp  # ✅ Importar el blueprint de usuarios
-    
-#     app.register_blueprint(auth_bp, url_prefix='/api/auth')
-#     app.register_blueprint(users_bp, url_prefix='/api/users')  # ✅ Registrar blueprint
-    
-#     return app
-
-
 from flask import Flask, jsonify, request
 from werkzeug.exceptions import HTTPException
 from flask_sqlalchemy import SQLAlchemy
@@ -84,7 +6,7 @@ from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
-from datetime import datetime  # 🔧 agregado
+from datetime import datetime, date  # 🔧 agregado
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -106,7 +28,7 @@ def create_app():
     cors = CORS(app, resources={
     r"/api/*": {
         "origins": app.config['CORS_ORIGINS'],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "Accept"],
         "expose_headers": ["Content-Type"],
         "supports_credentials": True,
@@ -211,8 +133,58 @@ def create_app():
     # Registrar blueprints
     from app.routes.auth import auth_bp
     from app.routes.users import users_bp  # ✅ Importar el blueprint de usuarios
+    from app.routes.roles import roles_bp  # ✅ Importar el blueprint de roles
+    from app.routes.permissions import permissions_bp  # ✅ Catálogo de permisos
+    from app.routes.geo import geo_bp
+    from app.routes.parroquias import parroquias_bp
+    from app.routes.personas import personas_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(users_bp, url_prefix='/api/users')  # ✅ Registrar blueprint
+    app.register_blueprint(roles_bp, url_prefix='/api/roles')  # ✅ Registrar blueprint de roles
+    app.register_blueprint(permissions_bp, url_prefix='/api/permissions')  # ✅ Catálogo permisos
+    app.register_blueprint(geo_bp, url_prefix='/api/geo')
+    app.register_blueprint(parroquias_bp, url_prefix='/api/parroquias')
+    app.register_blueprint(personas_bp, url_prefix='/api/personas')
+
+    # Crear tablas si no existen (útil en desarrollo)
+    with app.app_context():
+        try:
+            db.create_all()
+        except Exception:
+            pass
+        try:
+            from app.models import User, Role, Provincia, Distrito, Departamento, Parroquia, Persona
+            if User.query.count() == 0:
+                admin_role = Role.query.filter_by(name='Admin').first()
+                if not admin_role:
+                    admin_role = Role(name='Admin', description='Administrador', permissions=['menu_principal','personal', 'liturgico', 'ventas', 'compras', 'almacen', 'contabilidad', 'reportes', 'seguridad', 'configuracion'])
+                    db.session.add(admin_role)
+                    db.session.flush()
+
+                prov = Provincia(prov_nombre='Lima')
+                dist = Distrito(dis_nombre='Lima')
+                db.session.add_all([prov, dist])
+                db.session.flush()
+
+                dep = Departamento(dep_nombre='Lima', provinciaid=prov.provinciaid, distritoid=dist.distritoid)
+                db.session.add(dep)
+                db.session.flush()
+
+                parr = Parroquia(par_nombre='Parroquia Central', par_direccion='Av. Principal 123', departamentoid=dep.departamentoid, par_telefono1='0000000', par_telefono2=None)
+                db.session.add(parr)
+                db.session.flush()
+
+                admin = User(name='Administrador', email='admin@parroquia.com', role='Admin', permissions=['personal', 'liturgico', 'ventas', 'compras', 'almacen', 'contabilidad', 'reportes', 'seguridad', 'configuracion'])
+                admin.set_password('Admin123!')
+                db.session.add(admin)
+                db.session.flush()
+
+                persona = Persona(userid=admin.id, per_nombres='Admin', per_apellidos='Principal', per_domicilio='Av. Principal 123', per_telefono='0000000', fecha_nacimiento=date(1990, 1, 1), parroquiaid=parr.parroquiaid)
+                db.session.add(persona)
+
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
     
     return app

@@ -1,23 +1,66 @@
 // parroquia-frontend/src/components/Modals/UserModal.js
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Save, Loader, Eye, EyeOff, User } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { ETIQUETAS_PERMISOS } from '../../constants/permissions';
+import ModalBase from './ModalBase.js';
+import SelectorRol from '../Form/SelectorRol.js';
 
 const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
+
     const [formData, setFormData] = useState({
         name: '',
         email: '',
         password: '',
         confirmPassword: '',
         role: 'user',
-        status: 'activo'
+        status: 'activo',
+        per_nombres: '',
+        per_apellidos: '',
+        per_domicilio: '',
+        per_telefono: '',
+        fecha_nacimiento: '',
+        parroquiaid: ''
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [rolesList, setRolesList] = useState([]);
+    const [parroquias, setParroquias] = useState([]);
+    const { authFetch } = useAuth();
+    const formRef = useRef(null);
 
     const validRoles = ['admin', 'secretaria', 'tesorero', 'colaborador', 'user'];
+
+    // Intenta verificar existencia de email usando distintos endpoints
+    const checkEmailExists = async (email) => {
+        const endpoints = [
+            `http://localhost:5000/api/users/exists?email=${encodeURIComponent(email)}`,
+            `http://localhost:5000/api/users/check-email?email=${encodeURIComponent(email)}`,
+            `http://localhost:5000/api/users?email=${encodeURIComponent(email)}`,
+        ];
+        for (const url of endpoints) {
+            try {
+                const resp = await authFetch(url, { method: 'GET' });
+                if (!resp.ok) continue;
+                const data = await resp.json();
+                if (Array.isArray(data)) {
+                    return data.some(u => (u.email || '').toLowerCase() === email.toLowerCase());
+                }
+                if (data && typeof data === 'object') {
+                    if (typeof data.exists === 'boolean') return data.exists;
+                    if (typeof data.found === 'boolean') return data.found;
+                    if (typeof data.available === 'boolean') return !data.available;
+                    if (Array.isArray(data.users)) return data.users.some(u => (u.email || '').toLowerCase() === email.toLowerCase());
+                }
+            } catch (_) {
+                // probar siguiente endpoint
+            }
+        }
+        // Si no se pudo verificar, asumir que no existe y dejar que el backend valide al crear
+        return false;
+    };
 
     const getRoleName = (role) => {
         const roleNames = {
@@ -30,78 +73,57 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
         return roleNames[role] || role;
     };
 
+    const getPermissionName = (permission) => {
+        return ETIQUETAS_PERMISOS[permission] || permission;
+    };
+
     const getStatusName = (status) => {
-        return status === 'activo' ? 'Activo' : 'Inactivo';
+        const s = String(status || '').toLowerCase();
+        return s === 'activo' || s === 'activo' ? 'Activo' : 'Inactivo';
     };
 
     const getStatusClass = (status) => {
-        return status === 'activo' 
-            ? 'bg-green-100 text-green-800 px-2 py-1 rounded-full text-sm'
-            : 'bg-red-100 text-red-800 px-2 py-1 rounded-full text-sm';
+        const s = String(status || '').toLowerCase();
+        const base = 'px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ';
+        return s === 'activo' ? base + 'bg-green-100 text-green-700' : base + 'bg-gray-100 text-gray-700';
     };
 
-    const getPermissionName = (permission) => {
-        const translations = {
-            'dashboard': 'Menu Principal',
-            'security': 'Seguridad',
-            'personal': 'Personal',
-            'liturgical': 'Litúrgico',
-            'accounting': 'Contabilidad',
-            'sales': 'Ventas',
-            'purchases': 'Compras',
-            'warehouse': 'Almacén',
-            'configuration': 'Configuración',
-            'reports': 'Reportes'
-        };
-        return translations[permission] || permission;
-    };
-
-    const checkEmailExists = async (email) => {
-        try {
-            const token = localStorage.getItem('access_token');
-            if (!token) {
-                throw new Error('Token de autenticación no encontrado');
-            }
-            
-            const url = `http://localhost:5000/api/users/check-email?email=${encodeURIComponent(email)}`;
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: { 
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                throw new Error('El servidor no está respondiendo correctamente.');
-            }
-            
-            if (response.ok) {
-                const data = await response.json();
-                return data.exists;
-            } else if (response.status === 401) {
-                throw new Error('Sesión expirada. Por favor, inicia sesión nuevamente.');
-            } else {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(`Error ${response.status}: ${errorData.message || response.statusText}`);
-            }
-        } catch (err) {
-            throw err;
-        }
-    };
+    // ModalBase maneja la clase del body y el portal
 
     useEffect(() => {
-        if (isOpen) {
-            document.body.classList.add('modal-open');
-        } else {
-            document.body.classList.remove('modal-open');
-        }
-        
-        return () => {
-            document.body.classList.remove('modal-open');
+        const cargarRoles = async () => {
+            try {
+                const resp = await authFetch('http://localhost:5000/api/roles');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const roles = Array.isArray(data.roles) ? data.roles : [];
+                setRolesList(roles);
+                // Si el rol actual no existe en catálogo, seleccionar el primero disponible
+                const names = roles.map(r => r.name);
+                if (roles.length && !names.includes((formData.role || '').trim())) {
+                    setFormData(prev => ({ ...prev, role: roles[0].name }));
+                }
+            } catch (e) {
+                // silencio: si falla, se usa fallback validRoles
+            }
         };
-    }, [isOpen]);
+        const cargarParroquias = async () => {
+            try {
+                const resp = await authFetch('http://localhost:5000/api/parroquias');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const lista = Array.isArray(data.parroquias) ? data.parroquias : [];
+                setParroquias(lista);
+                // Autoseleccionar si solo hay una y no hay valor actual
+                if (lista.length === 1 && !formData.parroquiaid) {
+                    setFormData(prev => ({ ...prev, parroquiaid: String(lista[0].parroquiaid) }));
+                }
+            } catch (e) {
+                // silencio
+            }
+        };
+        if (isOpen) { cargarRoles(); cargarParroquias(); }
+    }, [isOpen, authFetch]);
 
     useEffect(() => {
         if ((mode === 'edit' || mode === 'view') && user) {
@@ -111,7 +133,13 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
                 password: '',
                 confirmPassword: '',
                 role: user.role || 'user',
-                status: user.status || 'activo'
+                status: user.status || 'activo',
+                per_nombres: user.persona?.per_nombres || user.name || '',
+                per_apellidos: user.persona?.per_apellidos || '',
+                per_domicilio: user.persona?.per_domicilio || '',
+                per_telefono: user.persona?.per_telefono || '',
+                fecha_nacimiento: user.persona?.fecha_nacimiento || '',
+                parroquiaid: user.persona?.parroquiaid || ''
             });
         } else {
             setFormData({
@@ -120,7 +148,13 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
                 password: '',
                 confirmPassword: '',
                 role: 'user',
-                status: 'activo'
+                status: 'activo',
+                per_nombres: '',
+                per_apellidos: '',
+                per_domicilio: '',
+                per_telefono: '',
+                fecha_nacimiento: '',
+                parroquiaid: ''
             });
         }
         setError('');
@@ -133,7 +167,7 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
         if (formData.name.length < 3) return 'El nombre debe tener al menos 3 caracteres';
         if (formData.name.length > 100) return 'El nombre no puede superar 100 caracteres';
         if (!formData.email.trim()) return 'El email es requerido';
-        
+
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(formData.email)) return 'Formato de email inválido';
 
@@ -146,8 +180,18 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
             if (formData.password !== formData.confirmPassword) return 'Las contraseñas no coinciden';
         }
 
-        if (!validRoles.includes(formData.role)) return 'Rol inválido';
-        if (!['activo', 'inactivo'].includes(formData.status)) return 'Estado inválido';
+        const rolesValidos = rolesList.length ? rolesList.map(r => r.name) : validRoles;
+        if (!rolesValidos.includes(formData.role)) return 'Rol inválido';
+
+        // Estado fijo Activo por defecto: no se valida ni edita
+
+        // Validaciones Persona (requeridos por el backend)
+        if (mode === 'add') {
+            if (!formData.per_nombres.trim()) return 'Los nombres de la persona son requeridos';
+            if (!formData.per_apellidos.trim()) return 'Los apellidos de la persona son requeridos';
+            if (!formData.fecha_nacimiento) return 'La fecha de nacimiento es requerida';
+            if (!formData.parroquiaid) return 'La parroquia es requerida';
+        }
 
         return null;
     };
@@ -167,7 +211,7 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
 
             const emailToCheck = formData.email.trim().toLowerCase();
             const originalEmail = user?.email?.toLowerCase() || '';
-            
+
             if (mode === 'add' || (mode === 'edit' && emailToCheck !== originalEmail)) {
                 try {
                     const exists = await checkEmailExists(emailToCheck);
@@ -187,8 +231,16 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
                 name: formData.name.trim(),
                 email: formData.email.trim().toLowerCase(),
                 role: formData.role,
-                permissions: ['dashboard', 'personal'],
-                status: formData.status
+                permissions: ['menu_principal', 'personal'],
+                // status omitido: backend lo asume Activo
+                persona: {
+                    per_nombres: (formData.per_nombres || formData.name).trim(),
+                    per_apellidos: (formData.per_apellidos || '').trim(),
+                    per_domicilio: (formData.per_domicilio || '').trim(),
+                    per_telefono: (formData.per_telefono || '').trim(),
+                    fecha_nacimiento: formData.fecha_nacimiento || null,
+                    parroquiaid: formData.parroquiaid ? Number(formData.parroquiaid) : null
+                }
             };
 
             if (mode === 'add') {
@@ -220,42 +272,61 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
         }
     };
 
+    const isReadOnly = mode === 'view';
+    const footer = useMemo(() => {
+        if (isReadOnly) {
+            return (
+                <button onClick={onClose} className="w-full px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium">
+                    Cerrar
+                </button>
+            );
+        }
+        return (
+            <div className="flex flex-col gap-2">
+                {mode !== 'add' && (
+                    <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">
+                        Nota: Los usuarios tienen acceso automático al Menú Principal y al módulo personal.
+                    </div>
+                )}
+                <div className="flex gap-3">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-white hover:text-gray-900"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => {
+                            if (formRef.current) {
+                                try { formRef.current.requestSubmit(); } catch { formRef.current.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })); }
+                            }
+                        }}
+                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                    >
+                        {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        {mode === 'add' ? 'Crear Usuario' : 'Guardar Cambios'}
+                    </button>
+                </div>
+            </div>
+        );
+    }, [isReadOnly, onClose, loading, mode]);
+
     if (!isOpen) return null;
 
-    const isReadOnly = mode === 'view';
-
     return (
-        <AnimatePresence>
-            {isOpen && (
-                <div 
-                    className="modal-overlay bg-black bg-opacity-50 flex items-center justify-center"
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget) {
-                            onClose();
-                        }
-                    }}
-                >
-                    <motion.div
-                        className="bg-white rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col"
-                        style={{ maxHeight: '90vh', margin: '2rem' }}
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {/* Header */}
-                        <div className="flex items-center justify-between p-6 border-b bg-white flex-shrink-0">
-                            <div className="flex items-center gap-3">
-                                {mode === 'view' && <User className="w-6 h-6 text-blue-600" />}
-                                <h2 className="text-xl font-semibold">{getModalTitle()}</h2>
-                            </div>
-                            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {/* Content */}
-                        <div className="overflow-y-auto flex-1 custom-scrollbar">
+        <ModalBase
+            isOpen={isOpen}
+            title={getModalTitle()}
+            icon={mode === 'view' ? User : undefined}
+            onClose={onClose}
+            closeOnOverlay={false}
+            size="xl"
+            footer={footer}
+        >
+            <div className="overflow-y-auto flex-1 custom-scrollbar">
                             {mode === 'view' ? (
                                 <div className="p-6 space-y-6">
                                     {/* Avatar e información principal */}
@@ -346,76 +417,52 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
                                         </div>
                                     </div>
 
-                                    {/* Footer */}
-                                    <div className="pt-4">
-                                        <button onClick={onClose} className="w-full px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium">
-                                            Cerrar
-                                        </button>
-                                    </div>
                                 </div>
                             ) : (
-                                <form onSubmit={handleSubmit} className="p-6">
+                                <form ref={formRef} onSubmit={handleSubmit} className="p-6">
                                     {error && (
                                         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">{error}</div>
                                     )}
 
-                                    {/* Grid de 2 columnas para el formulario */}
-                                    <div className="grid grid-cols-2 gap-6 mb-6">
+                                    {/* Grid principal: datos de cuenta */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                         {/* Columna izquierda */}
                                         <div className="space-y-4">
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo *</label>
+                                                <label className="block text-sm font-medium text-gray-500 mb-1">Nombre de usuario o alias *</label>
                                                 <input
                                                     type="text"
                                                     value={formData.name}
                                                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                                                     required
                                                     readOnly={isReadOnly}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Correo electrónico *</label>
+                                                <label className="block text-sm font-medium text-gray-500 mb-1">Correo electrónico *</label>
                                                 <input
                                                     type="email"
                                                     value={formData.email}
                                                     onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                                                     required
                                                     readOnly={isReadOnly}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                                                 />
                                             </div>
 
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Rol *</label>
-                                                <select
+                                                <label className="block text-sm font-medium text-gray-500 mb-1">Rol *</label>
+                                                <SelectorRol
                                                     value={formData.role}
-                                                    onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
-                                                    required
+                                                    onChange={(val) => setFormData(prev => ({ ...prev, role: val }))}
                                                     disabled={isReadOnly}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                >
-                                                    <option value="user">Usuario</option>
-                                                    <option value="admin">Administrador</option>
-                                                    <option value="secretaria">Secretaria</option>
-                                                    <option value="tesorero">Tesorero</option>
-                                                    <option value="colaborador">Colaborador</option>
-                                                </select>
+                                                    className="text-gray-900"
+                                                />
                                             </div>
 
-                                            <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-                                                <select
-                                                    value={formData.status}
-                                                    onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-                                                    disabled={isReadOnly}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                >
-                                                    <option value="activo">Activo</option>
-                                                    <option value="inactivo">Inactivo</option>
-                                                </select>
-                                            </div>
+                                            {/* Estado eliminado: siempre Activo por defecto */}
                                         </div>
 
                                         {/* Columna derecha */}
@@ -423,7 +470,7 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
                                             {!isReadOnly && (
                                                 <>
                                                     <div>
-                                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                        <label className="block text-sm font-medium text-gray-500 mb-1">
                                                             Contraseña {mode === 'add' ? '*' : '(dejar vacío para no cambiar)'}
                                                         </label>
                                                         <div className="relative">
@@ -432,7 +479,7 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
                                                                 value={formData.password}
                                                                 onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                                                                 required={mode === 'add'}
-                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10"
+                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10 text-gray-900"
                                                             />
                                                             <button
                                                                 type="button"
@@ -446,14 +493,14 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
 
                                                     {(mode === 'add' || formData.password) && (
                                                         <div>
-                                                            <label className="block text-sm font-medium text-gray-700 mb-1">Confirmar contraseña *</label>
+                                                            <label className="block text-sm font-medium text-gray-500 mb-1">Confirmar contraseña *</label>
                                                             <div className="relative">
                                                                 <input
                                                                     type={showConfirmPassword ? 'text' : 'password'}
                                                                     value={formData.confirmPassword}
                                                                     onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
                                                                     required
-                                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10"
+                                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10 text-gray-900"
                                                                 />
                                                                 <button
                                                                     type="button"
@@ -466,41 +513,85 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
                                                         </div>
                                                     )}
 
-                                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mt-4">
-                                                        <p className="text-sm text-blue-800">
-                                                            <strong>Nota:</strong> Los nuevos usuarios tendrán acceso automático al Menú Principal y al módulo personal.
-                                                        </p>
-                                                    </div>
+                                                    
                                                 </>
                                             )}
                                         </div>
                                     </div>
 
-                                    {/* Footer */}
-                                    <div className="flex gap-3 pt-4 border-t">
-                                        <button
-                                            type="button"
-                                            onClick={onClose}
-                                            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                                        >
-                                            Cancelar
-                                        </button>
-                                        <button
-                                            type="submit"
-                                            disabled={loading}
-                                            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
-                                        >
-                                            {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                            {mode === 'add' ? 'Crear Usuario' : 'Guardar Cambios'}
-                                        </button>
+                                    {/* Sección completa de Datos de Persona debajo para evitar espacios en blanco */}
+                                    <div className="mt-2 p-4 rounded-lg border">
+                                        <p className="font-medium mb-3 text-white">Datos de Persona</p>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="col-span-1">
+                                                <label className="block text-sm font-medium text-gray-500 mb-1">Nombres *</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.per_nombres}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, per_nombres: e.target.value }))}
+                                                    required={mode === 'add'}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                                />
+                                            </div>
+                                            <div className="col-span-1">
+                                                <label className="block text-sm font-medium text-gray-500 mb-1">Apellidos *</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.per_apellidos}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, per_apellidos: e.target.value }))}
+                                                    required={mode === 'add'}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                                />
+                                            </div>
+                                            <div className="col-span-1">
+                                                <label className="block text-sm font-medium text-gray-500 mb-1">Fecha de nacimiento *</label>
+                                                <input
+                                                    type="date"
+                                                    value={formData.fecha_nacimiento}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, fecha_nacimiento: e.target.value }))}
+                                                    required={mode === 'add'}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                                />
+                                            </div>
+                                            <div className="col-span-1">
+                                                <label className="block text-sm font-medium text-gray-500 mb-1">Parroquia *</label>
+                                                <select
+                                                    value={formData.parroquiaid}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, parroquiaid: e.target.value }))}
+                                                    required={mode === 'add'}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                                >
+                                                    <option value="">Seleccione una parroquia</option>
+                                                    {parroquias.map(p => (
+                                                        <option key={p.parroquiaid} value={p.parroquiaid}>{p.par_nombre}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="col-span-1">
+                                                <label className="block text-sm font-medium text-gray-500 mb-1">Domicilio</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.per_domicilio}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, per_domicilio: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                                />
+                                            </div>
+                                            <div className="col-span-1">
+                                                <label className="block text-sm font-medium text-gray-500 mb-1">Teléfono</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.per_telefono}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, per_telefono: e.target.value }))}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
+
                                 </form>
                             )}
-                        </div>
-                    </motion.div>
-                </div>
-            )}
-        </AnimatePresence>
+            </div>
+        </ModalBase>
     );
 };
 

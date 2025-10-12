@@ -7,11 +7,13 @@ import {
   FileText, Clock, TrendingUp, Archive, ArrowLeft
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const Sidebar = ({ collapsed, toggleCollapse }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, hasPermission } = useAuth();
+  const { theme } = useTheme();
   const flyoutRef = useRef(null);
 
   const menuItems = [
@@ -20,7 +22,7 @@ const Sidebar = ({ collapsed, toggleCollapse }) => {
     id: 'liturgical',
     title: 'Actos Litúrgicos',
     icon: Church,
-    permission: 'liturgical',
+    permission: 'liturgico',
     children: [
       { title: 'Gestionar Actos', path: '/liturgico/gestionar', icon: Church },
       { title: 'Horarios', path: '/liturgico/horarios', icon: Clock },
@@ -28,15 +30,15 @@ const Sidebar = ({ collapsed, toggleCollapse }) => {
       { title: 'Reportes', path: '/liturgico/reportes', icon: FileText }
     ]
   },
-  { id: 'sales', title: 'Módulo Ventas', icon: TrendingUp, path: '/ventas', permission: 'sales' },
-  { id: 'purchases', title: 'Módulo Compras', icon: ShoppingCart, path: '/compras', permission: 'purchases' },
-  { id: 'warehouse', title: 'Módulo Almacén', icon: Package, path: '/almacen', permission: 'warehouse' },
-  { id: 'accounting', title: 'Módulo Contabilidad', icon: DollarSign, path: '/contabilidad', permission: 'accounting' },
+  { id: 'sales', title: 'Módulo Ventas', icon: TrendingUp, path: '/ventas', permission: 'ventas' },
+  { id: 'purchases', title: 'Módulo Compras', icon: ShoppingCart, path: '/compras', permission: 'compras' },
+  { id: 'warehouse', title: 'Módulo Almacén', icon: Package, path: '/almacen', permission: 'almacen' },
+  { id: 'accounting', title: 'Módulo Contabilidad', icon: DollarSign, path: '/contabilidad', permission: 'contabilidad' },
   {
     id: 'reports',
     title: 'Módulo Reportes',
     icon: BarChart3,
-    permission: 'reports',
+    permission: 'reportes',
     children: [
       { title: 'Gerenciales', path: '/reportes/gerenciales', icon: TrendingUp },
       { title: 'Transaccionales', path: '/reportes/transaccionales', icon: Archive }
@@ -46,14 +48,14 @@ const Sidebar = ({ collapsed, toggleCollapse }) => {
     id: 'security',
     title: 'Módulo Seguridad',
     icon: Shield,
-    permission: 'security',
+    permission: 'seguridad',
     children: [
       { title: 'Usuarios', path: '/seguridad/usuarios', icon: Users },
       { title: 'Roles', path: '/seguridad/roles', icon: Shield },
       { title: 'Permisos', path: '/seguridad/permisos', icon: Settings }
     ]
   },
-  { id: 'configuration', title: 'Módulo Configuración', icon: Settings, path: '/configuracion', permission: 'configuration' }
+  { id: 'configuration', title: 'Módulo Configuración', icon: Settings, path: '/configuracion', permission: 'configuracion' }
 ];
 
   const getCurrentModule = () => {
@@ -69,6 +71,7 @@ const Sidebar = ({ collapsed, toggleCollapse }) => {
   const filteredMenu = currentModule && hasPermission(currentModule.permission) ? currentModule : null;
 
   const isActive = (path) => location.pathname.startsWith(path);
+  const isDarkTheme = theme === 'black';
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -135,7 +138,9 @@ const Sidebar = ({ collapsed, toggleCollapse }) => {
                     className={`flex items-center p-2 rounded-lg font-medium transition-all ${collapsed ? 'justify-center' : 'gap-3'}`}
                     style={{
                       background: isActive(child.path) ? "var(--surface-2)" : "transparent",
-                      color: isActive(child.path) ? "var(--primary)" : "var(--text)"
+                      color: isActive(child.path)
+                        ? (isDarkTheme ? "var(--text-strong)" : "var(--primary)")
+                        : "var(--text)"
                     }}
                   >
                     <child.icon className="w-5 h-5" />
@@ -149,7 +154,9 @@ const Sidebar = ({ collapsed, toggleCollapse }) => {
                 className={`flex items-center p-2 rounded-lg font-medium transition-all ${collapsed ? 'justify-center' : 'gap-3'}`}
                 style={{
                   background: isActive(filteredMenu.path) ? "var(--surface-2)" : "transparent",
-                  color: isActive(filteredMenu.path) ? "var(--primary)" : "var(--text)"
+                  color: isActive(filteredMenu.path)
+                    ? (isDarkTheme ? "var(--text-strong)" : "var(--primary)")
+                    : "var(--text)"
                 }}
               >
                 <filteredMenu.icon className="w-5 h-5" />

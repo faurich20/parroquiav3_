@@ -28,11 +28,13 @@ class Config:
     SQLALCHEMY_DATABASE_URI = 'postgresql://postgres:982619321@localhost:5432/parroquia_db'
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    #JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=10)  # 🔧 ahora expira en 10 minutos (inactividad backend + seguridad)
-    #JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)   # 🔧 refresh token dura 30 días (rotado al usarlo)
-    #prueba
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(seconds=60)  # access token dura 30s
-    JWT_REFRESH_TOKEN_EXPIRES = timedelta(hours=24)  # refresh token dura 1 min
+    
+    # ⚙️ TIEMPOS SINCRONIZADOS CON FRONTEND
+    # Access token: 15 minutos (frontend hace refresh proactivo a los 13 min)
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=1)
+    
+    # Refresh token: 7 días (con rotación en cada uso)
+    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=7)
     
     JWT_ERROR_MESSAGE_KEY = 'error'
     CORS_ORIGINS = ['http://localhost:3000']

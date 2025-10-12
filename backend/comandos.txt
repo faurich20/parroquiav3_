@@ -13,5 +13,8 @@ pip install email-validator
 #para crear la base de datos
 python scripts/init_db.py
 
+#para crear la base de datos version 2
+psql -U postgres -h localhost -f backend/scripts/database_full.sql
+
 #para que ejecutes el backend
 python run.py

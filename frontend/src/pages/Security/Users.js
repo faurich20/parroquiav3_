@@ -1,13 +1,14 @@
 // parroquia-frontend/src/pages/Security/User.js
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Plus, Search, Edit, Trash2, Shield, Loader, Eye } from 'lucide-react';
 import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 import ActionButton from '../../components/Common/ActionButton';
+import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
 import UserModal from "../../components/Modals/UserModal";
-
-import { useAuth } from '../../contexts/AuthContext';
+import useCrud from '../../hooks/useCrud';
+import TablaBase from '../../components/Common/TablaBase';
 
 const UsersPage = () => {
     const [searchTerm, setSearchTerm] = useState('');
@@ -15,36 +16,10 @@ const UsersPage = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState("add");
     const [selectedUser, setSelectedUser] = useState(null);
-    const [users, setUsers] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+    const { items: users, setItems, loading, error, createItem, updateItem, removeItem, updateStatus } = useCrud('http://localhost:5000/api/users');
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState(null);
     const itemsPerPage = 7;
-
-    const { authFetch } = useAuth();
-
-    // Obtener usuarios desde el backend
-    useEffect(() => {
-        const fetchUsers = async () => {
-            try {
-                setLoading(true);
-                const response = await authFetch('http://localhost:5000/api/users');
-
-                if (!response.ok) {
-                    throw new Error('Error al obtener usuarios');
-                }
-
-                const data = await response.json();
-                setUsers(data.users || []);
-            } catch (err) {
-                setError(err.message);
-                console.error('Error obteniendo usuarios:', err);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchUsers();
-    }, [authFetch]);
 
     // Funciones para abrir modales
     const openAddModal = () => {
@@ -67,50 +42,14 @@ const UsersPage = () => {
 
     // Crear usuario
     const handleCreateUser = async (userData) => {
-        try {
-            const response = await authFetch('http://localhost:5000/api/users', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(userData)
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Error al crear usuario');
-            }
-
-            const data = await response.json();
-            setUsers(prevUsers => [...prevUsers, data.user]);
-            return { success: true, message: data.message };
-        } catch (err) {
-            console.error('Error en handleCreateUser:', err);
-            return { success: false, error: err.message };
-        }
+        const resp = await createItem(userData);
+        return resp.success ? { success: true } : { success: false, error: resp.error };
     };
 
     // Editar usuario
     const handleEditUser = async (userId, userData) => {
-        try {
-            const response = await authFetch(`http://localhost:5000/api/users/${userId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(userData)
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Error al actualizar usuario');
-            }
-
-            const data = await response.json();
-            setUsers(prevUsers =>
-                prevUsers.map(user => user.id === userId ? data.user : user)
-            );
-            return { success: true, message: data.message };
-        } catch (err) {
-            console.error('Error actualizando usuario:', err);
-            return { success: false, error: err.message };
-        }
+        const resp = await updateItem(userId, userData);
+        return resp.success ? { success: true } : { success: false, error: resp.error };
     };
 
     // Centralizar submit del modal
@@ -128,45 +67,26 @@ const UsersPage = () => {
     };
 
     const handleStatusChange = async (userId, currentStatus) => {
-        try {
-            const newStatus = currentStatus === 'Activo' ? 'Inactivo' : 'Activo';
-            const response = await authFetch(`http://localhost:5000/api/users/${userId}/status`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: newStatus })
-            });
-
-            if (response.ok) {
-                setUsers(prevUsers =>
-                    prevUsers.map(user =>
-                        user.id === userId ? { ...user, status: newStatus } : user
-                    )
-                );
-            } else {
-                throw new Error('Error al cambiar estado');
-            }
-        } catch (err) {
-            console.error('Error cambiando estado:', err);
+        const newStatus = currentStatus === 'Activo' ? 'Inactivo' : 'Activo';
+        const resp = await updateStatus(userId, newStatus);
+        if (!resp.success) {
             alert('Error al cambiar el estado del usuario');
         }
     };
 
-    const handleDeleteUser = async (userId) => {
-        if (window.confirm('¿Estás seguro de que deseas eliminar este usuario?')) {
-            try {
-                const response = await authFetch(`http://localhost:5000/api/users/${userId}`, {
-                    method: 'DELETE'
-                });
+    const requestDeleteUser = (userId) => {
+        setDeleteTarget(userId);
+        setConfirmOpen(true);
+    };
 
-                if (response.ok) {
-                    setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
-                } else {
-                    throw new Error('Error al eliminar usuario');
-                }
-            } catch (err) {
-                console.error('Error eliminando usuario:', err);
-                alert('Error al eliminar el usuario');
-            }
+    const confirmDeleteUser = async () => {
+        const userId = deleteTarget;
+        setConfirmOpen(false);
+        setDeleteTarget(null);
+        if (!userId) return;
+        const resp = await removeItem(userId);
+        if (!resp.success) {
+            alert('Error al eliminar el usuario');
         }
     };
 
@@ -215,7 +135,8 @@ const UsersPage = () => {
             >
                 <motion.button
                     onClick={openAddModal}
-                    className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 hover:from-blue-700 hover:to-purple-700 transition-all"
+                    className="text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110"
+                    style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                 >
@@ -228,151 +149,107 @@ const UsersPage = () => {
                 {/* Buscador */}
                 <div className="flex flex-col sm:flex-row gap-4 mb-4">
                     <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: 'var(--muted)' }} />
                         <input
                             type="text"
                             placeholder="Buscar usuarios..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full pl-10 pr-4 py-2 rounded-xl focus:ring-2 transition"
+                            style={{
+                                background: 'var(--surface-2)',
+                                color: 'var(--text)',
+                                border: '1px solid var(--border)'
+                            }}
                         />
                     </div>
                 </div>
 
                 {/* Tabla */}
-                <div className="overflow-x-auto">
-                    <table className="w-full" style={{ tableLayout: 'fixed' }}>
-                        <thead>
-                            <tr className="border-b border-gray-200">
-                                <th className="text-left py-2 px-4 font-semibold text-gray-900" style={{ width: '25%' }}>Usuario</th>
-                                <th className="text-center py-2 px-4 font-semibold text-gray-900" style={{ width: '10%' }}>Rol</th>
-                                <th className="text-center py-2 px-4 font-semibold text-gray-900" style={{ width: '15%' }}>Estado</th>
-                                <th className="text-left py-2 px-4 font-semibold text-gray-900" style={{ width: '15%' }}>Último Acceso</th>
-                                <th className="text-center py-2 px-4 font-semibold text-gray-900" style={{ width: '35%' }}>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {currentUsers.length > 0 ? (
-                                currentUsers.map((user, index) => (
-                                    <motion.tr
-                                        key={user.id}
-                                        className="border-b border-gray-100 hover:bg-gray-50"
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: index * 0.05 }}
+                {(() => {
+                    const columns = [
+                        {
+                            key: 'usuario', header: 'Usuario', width: '25%', render: (user) => (
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, var(--primary), var(--secondary))' }}>
+                                        <span className="text-white text-sm font-bold">{user.name ? user.name.charAt(0).toUpperCase() : 'U'}</span>
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-medium truncate" style={{ color: 'var(--text)' }}>{user.name}</p>
+                                        <p className="text-sm truncate" style={{ color: 'var(--muted)' }}>{user.email}</p>
+                                    </div>
+                                </div>
+                            )
+                        },
+                        {
+                            key: 'rol', header: 'Rol', width: '10%', align: 'center', render: (user) => (
+                                <span className="inline-block mt-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                                    {typeof user.role === 'object' ? (user.role.name || user.role.id || '') : user.role}
+                                </span>
+                            )
+                        },
+                        {
+                            key: 'estado', header: 'Estado', width: '15%', align: 'center', render: (user) => (
+                                <div className="flex flex-col items-center gap-1">
+                                    <span className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${String(user.status).toLowerCase() === 'activo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                                        {String(user.status).toLowerCase() === 'activo' ? 'Activo' : 'Inactivo'}
+                                    </span>
+                                    <button
+                                        className={`px-2 py-1 rounded-lg text-white text-xs font-medium transition whitespace-nowrap ${user.status === 'Activo' ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'}`}
+                                        onClick={() => handleStatusChange(user.id, user.status)}
                                     >
-                                        <td className="py-2 px-4">
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <div
-                                                    className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-                                                    style={{
-                                                        background: "linear-gradient(135deg, var(--primary), var(--secondary))"
-                                                    }}
-                                                >
-                                                    <span className="text-white font-medium">
-                                                        {user.name.charAt(0)}
-                                                    </span>
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="font-medium text-gray-900 truncate">{user.name}</p>
-                                                    <p className="text-sm text-gray-500 truncate">{user.email}</p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="py-2 px-4 text-center">
-                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium ${
-                                                user.role === 'admin' ? 'bg-red-100 text-red-700' :
-                                                user.role === 'secretaria' ? 'bg-blue-100 text-blue-700' :
-                                                'bg-green-100 text-green-700'
-                                            }`}>
-                                                <Shield className="w-3 h-3" />
-                                                <span className="truncate">{user.role}</span>
-                                            </span>
-                                        </td>
-                                        <td className="py-2 px-4 text-center">
-                                            <div className="flex flex-col items-center gap-1">
-                                                <span className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${
-                                                    user.status === 'Activo' ? 
-                                                    'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                                                }`}>
-                                                    {user.status}
-                                                </span>
-                                                <button
-                                                    className={`px-2 py-1 rounded-lg text-white text-xs font-medium transition whitespace-nowrap ${
-                                                        user.status === 'Activo'
-                                                        ? 'bg-red-500 hover:bg-red-600'
-                                                        : 'bg-blue-500 hover:bg-blue-600'
-                                                    }`}
-                                                    onClick={() => handleStatusChange(user.id, user.status)}
-                                                >
-                                                    {user.status === 'Activo' ? 'Dar Baja' : 'Dar Alta'}
-                                                </button>
-                                            </div>
-                                        </td>
-
-                                        <td className="py-2 px-4 text-sm text-gray-600">
-                                            {user.last_login ? new Date(user.last_login).toLocaleString('es-ES') : 'Nunca'}
-                                        </td>
-
-                                        <td className="py-2 px-4">
-                                            <div className="flex items-center justify-center gap-1 flex-wrap">
-                                                <ActionButton
-                                                    color="blue"
-                                                    icon={Edit}
-                                                    onClick={() => openEditModal(user)}
-                                                    title="Editar usuario"
-                                                >
-                                                    Editar
-                                                </ActionButton>
-                                                <ActionButton
-                                                    color="red"
-                                                    icon={Trash2}
-                                                    onClick={() => handleDeleteUser(user.id)}
-                                                    title="Eliminar usuario"
-                                                >
-                                                    Eliminar
-                                                </ActionButton>
-                                                <ActionButton
-                                                    color="blue"
-                                                    icon={Eye}
-                                                    onClick={() => openViewModal(user)}
-                                                    title="Ver información del usuario"
-                                                >
-                                                    Ver más
-                                                </ActionButton>
-                                            </div>
-                                        </td>
-                                    </motion.tr>
-                                ))
-                            ) : (
-                                <tr>
-                                    <td colSpan={5} className="text-center py-6 text-gray-500">
-                                        {users.length === 0 ? 'No hay usuarios registrados' : 'No se encontraron usuarios'}
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                                        {user.status === 'Activo' ? 'Dar Baja' : 'Dar Alta'}
+                                    </button>
+                                </div>
+                            )
+                        },
+                        {
+                            key: 'ultimo', header: 'Último Acceso', width: '15%', render: (user) => (
+                                <span>{user.last_login ? new Date(user.last_login).toLocaleString('es-ES') : 'Nunca'}</span>
+                            )
+                        },
+                        {
+                            key: 'acciones', header: 'Acciones', width: '35%', align: 'center', render: (user) => (
+                                <div className="flex items-center justify-center gap-2">
+                                    <ActionButton color="theme" icon={Edit} onClick={() => openEditModal(user)} title="Editar usuario">Editar</ActionButton>
+                                    <ActionButton color="red" icon={Trash2} onClick={() => requestDeleteUser(user.id)} title="Eliminar usuario">Eliminar</ActionButton>
+                                    <ActionButton color="blue" icon={Eye} onClick={() => openViewModal(user)} title="Ver más">Ver más</ActionButton>
+                                </div>
+                            )
+                        }
+                    ];
+                    return (
+                        <TablaBase
+                            columns={columns}
+                            data={currentUsers}
+                            rowKey={(u) => u.id}
+                            hover
+                            striped
+                            emptyText="No hay usuarios"
+                        />
+                    );
+                })()}
 
                 {/* Paginación */}
-                <div className="flex justify-between items-center mt-4 px-2">
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <span>Página</span>
+                <div className="flex items-center justify-between mt-4">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm" style={{ color: 'var(--muted)' }}>Página</span>
                         <input
                             type="number"
-                            value={currentPage}
                             min={1}
-                            max={totalPages}
+                            max={totalPages || 1}
+                            value={currentPage}
                             onChange={(e) => {
-                                const value = Number(e.target.value);
-                                if (value >= 1 && value <= totalPages) {
-                                    setCurrentPage(value);
-                                }
+                                const n = parseInt(e.target.value || '1', 10);
+                                if (Number.isNaN(n)) return;
+                                const max = totalPages || 1;
+                                const clamped = Math.max(1, Math.min(n, max));
+                                setCurrentPage(clamped);
                             }}
-                            className="w-14 px-2 py-1 border rounded-lg text-center text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-14 px-2 py-1 rounded-lg text-center text-sm"
+                            style={{ background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border)' }}
                         />
-                        <span>de {totalPages || 1}</span>
+                        <span className="text-sm" style={{ color: 'var(--muted)' }}>de {totalPages || 1}</span>
                     </div>
 
                     <div className="flex gap-2">
@@ -380,27 +257,31 @@ const UsersPage = () => {
                             onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                             disabled={currentPage === 1}
                             className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
+                            style={{ borderColor: 'var(--border)' }}
                         >
                             Anterior
                         </button>
 
-                        {Array.from({ length: totalPages }).map((_, i) => (
+                        {Array.from({ length: totalPages || 1 }).map((_, i) => (
                             <button
                                 key={i}
                                 onClick={() => setCurrentPage(i + 1)}
-                                className={`px-3 py-1 rounded-lg border text-sm transition-colors ${currentPage === i + 1
-                                    ? 'bg-blue-600 text-white border-blue-600'
-                                    : 'hover:bg-gray-100'
-                                    }`}
+                                className={`px-3 py-1 rounded-lg border text-sm transition-colors`}
+                                style={
+                                    currentPage === i + 1
+                                        ? { background: 'var(--primary)', color: '#ffffff', borderColor: 'var(--primary)' }
+                                        : { borderColor: 'var(--border)' }
+                                }
                             >
                                 {i + 1}
                             </button>
                         ))}
 
                         <button
-                            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                            disabled={currentPage === totalPages}
+                            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages || 1))}
+                            disabled={currentPage === (totalPages || 1)}
                             className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
+                            style={{ borderColor: 'var(--border)' }}
                         >
                             Siguiente
                         </button>
@@ -415,6 +296,17 @@ const UsersPage = () => {
                 user={selectedUser}
                 onClose={() => setIsModalOpen(false)}
                 onSubmit={handleModalSubmit}
+            />
+
+            {/* Diálogo de confirmación */}
+            <DialogoConfirmacion
+                abierto={confirmOpen}
+                titulo="Eliminar usuario"
+                mensaje="¿Estás seguro de eliminar este usuario? Esta acción no se puede deshacer."
+                onConfirmar={confirmDeleteUser}
+                onCancelar={() => { setConfirmOpen(false); setDeleteTarget(null); }}
+                confirmText="Eliminar"
+                cancelText="Cancelar"
             />
         </div>
     );
