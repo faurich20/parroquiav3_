@@ -138,6 +138,7 @@ def create_app():
     from app.routes.geo import geo_bp
     from app.routes.parroquias import parroquias_bp
     from app.routes.personas import personas_bp
+    from app.routes.liturgical import liturgical_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(users_bp, url_prefix='/api/users')  # ✅ Registrar blueprint
@@ -146,6 +147,7 @@ def create_app():
     app.register_blueprint(geo_bp, url_prefix='/api/geo')
     app.register_blueprint(parroquias_bp, url_prefix='/api/parroquias')
     app.register_blueprint(personas_bp, url_prefix='/api/personas')
+    app.register_blueprint(liturgical_bp, url_prefix='/api/liturgical')
 
     # Crear tablas si no existen (útil en desarrollo)
     with app.app_context():

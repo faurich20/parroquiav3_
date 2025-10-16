@@ -183,3 +183,86 @@ class Persona(db.Model):
             'fecha_nacimiento': self.fecha_nacimiento.isoformat() if self.fecha_nacimiento else None,
             'parroquiaid': self.parroquiaid
         }
+
+
+# ==========================
+#  Liturgia
+# ==========================
+class LiturgicalAct(db.Model):
+    __tablename__ = 'liturgical_act'
+
+    id = db.Column(db.Integer, primary_key=True)
+    type = db.Column(db.String(50), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    time = db.Column(db.String(10), nullable=False)  # formato HH:MM
+    location = db.Column(db.String(200))
+    notes = db.Column(db.Text)
+    is_active = db.Column(db.Boolean, default=True)
+    parroquiaid = db.Column(db.Integer, db.ForeignKey('parroquia.parroquiaid'))
+
+    parroquia = db.relationship('Parroquia')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'type': self.type,
+            'title': self.title,
+            'date': self.date.isoformat() if self.date else None,
+            'time': self.time,
+            'location': self.location,
+            'notes': self.notes,
+            'is_active': self.is_active,
+            'parroquiaid': self.parroquiaid,
+        }
+
+
+class LiturgicalSchedule(db.Model):
+    __tablename__ = 'liturgical_schedule'
+
+    id = db.Column(db.Integer, primary_key=True)
+    type = db.Column(db.String(50), nullable=False)
+    weekday = db.Column(db.SmallInteger, nullable=False)  # 0-6
+    time = db.Column(db.String(10), nullable=False)  # HH:MM
+    location = db.Column(db.String(200))
+    is_active = db.Column(db.Boolean, default=True)
+    parroquiaid = db.Column(db.Integer, db.ForeignKey('parroquia.parroquiaid'))
+
+    parroquia = db.relationship('Parroquia')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'type': self.type,
+            'weekday': self.weekday,
+            'time': self.time,
+            'location': self.location,
+            'is_active': self.is_active,
+            'parroquiaid': self.parroquiaid,
+        }
+
+
+class LiturgicalReservation(db.Model):
+    __tablename__ = 'liturgical_reservation'
+
+    id = db.Column(db.Integer, primary_key=True)
+    act_id = db.Column(db.Integer, db.ForeignKey('liturgical_act.id'))
+    personaid = db.Column(db.Integer, db.ForeignKey('persona.personaid'))
+    reserved_date = db.Column(db.Date, nullable=False)
+    reserved_time = db.Column(db.String(10))  # HH:MM
+    status = db.Column(db.String(20), default='pendiente')
+    notes = db.Column(db.Text)
+
+    act = db.relationship('LiturgicalAct')
+    persona = db.relationship('Persona')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'act_id': self.act_id,
+            'personaid': self.personaid,
+            'reserved_date': self.reserved_date.isoformat() if self.reserved_date else None,
+            'reserved_time': self.reserved_time,
+            'status': self.status,
+            'notes': self.notes,
+        }
