@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from datetime import datetime
 from app import db
-from app.models import LiturgicalAct, LiturgicalSchedule, LiturgicalReservation
+from app.models import ActoLiturgico, LiturgicalAct, LiturgicalSchedule, LiturgicalReservation
 
 liturgical_bp = Blueprint('liturgical', __name__)
 
@@ -18,7 +18,7 @@ def parse_date(date_str):
 @jwt_required()
 def list_acts():
     try:
-        items = [a.to_dict() for a in LiturgicalAct.query.order_by(LiturgicalAct.id.desc()).all()]
+        items = [a.to_dict() for a in ActoLiturgico.query.order_by(ActoLiturgico.actoliturgicoid.desc()).all()]
         return jsonify({'items': items}), 200
     except Exception as e:
         print('Error list_acts', e)
@@ -29,18 +29,23 @@ def list_acts():
 def create_act():
     try:
         data = request.get_json() or {}
-        date = parse_date(data.get('date'))
-        if not data.get('type') or not data.get('title') or not date or not data.get('time'):
-            return jsonify({'error': 'type, title, date, time son requeridos'}), 400
-        item = LiturgicalAct(
-            type=(data.get('type') or '').strip(),
-            title=(data.get('title') or '').strip(),
-            date=date,
-            time=(data.get('time') or '').strip(),
-            location=(data.get('location') or '').strip() or None,
-            notes=(data.get('notes') or '').strip() or None,
-            is_active=bool(data.get('is_active', True)),
-            parroquiaid=data.get('parroquiaid')
+        act_fecha = parse_date(data.get('act_fecha'))
+        act_hora_str = (data.get('act_hora') or '').strip()
+        try:
+            act_hora = datetime.strptime(act_hora_str, '%H:%M').time()
+        except Exception:
+            act_hora = None
+        required = [data.get('parroquiaid'), data.get('act_nombre'), data.get('act_titulo'), act_fecha, act_hora]
+        if any(v in [None, '', False] for v in required):
+            return jsonify({'error': 'parroquiaid, act_nombre, act_titulo, act_fecha y act_hora son requeridos'}), 400
+        item = ActoLiturgico(
+            parroquiaid=data.get('parroquiaid'),
+            act_nombre=(data.get('act_nombre') or '').strip(),
+            act_titulo=(data.get('act_titulo') or '').strip(),
+            act_fecha=act_fecha,
+            act_hora=act_hora,
+            act_descripcion=(data.get('act_descripcion') or '').strip() or None,
+            act_estado=bool(data.get('act_estado', True)),
         )
         db.session.add(item)
         db.session.commit()
@@ -54,21 +59,25 @@ def create_act():
 @jwt_required()
 def update_act(act_id):
     try:
-        item = LiturgicalAct.query.get(act_id)
+        item = ActoLiturgico.query.get(act_id)
         if not item:
             return jsonify({'error': 'No encontrado'}), 404
         data = request.get_json() or {}
-        if 'type' in data: item.type = (data.get('type') or '').strip()
-        if 'title' in data: item.title = (data.get('title') or '').strip()
-        if 'date' in data:
-            d = parse_date(data.get('date'))
+        if 'parroquiaid' in data: item.parroquiaid = data.get('parroquiaid')
+        if 'act_nombre' in data: item.act_nombre = (data.get('act_nombre') or '').strip()
+        if 'act_titulo' in data: item.act_titulo = (data.get('act_titulo') or '').strip()
+        if 'act_fecha' in data:
+            d = parse_date(data.get('act_fecha'))
             if not d:
                 return jsonify({'error': 'Fecha inválida'}), 400
-            item.date = d
-        if 'time' in data: item.time = (data.get('time') or '').strip()
-        if 'location' in data: item.location = (data.get('location') or '').strip() or None
-        if 'notes' in data: item.notes = (data.get('notes') or '').strip() or None
-        if 'is_active' in data: item.is_active = bool(data.get('is_active'))
+            item.act_fecha = d
+        if 'act_hora' in data:
+            try:
+                item.act_hora = datetime.strptime((data.get('act_hora') or '').strip(), '%H:%M').time()
+            except Exception:
+                return jsonify({'error': 'Hora inválida (HH:MM)'}), 400
+        if 'act_descripcion' in data: item.act_descripcion = (data.get('act_descripcion') or '').strip() or None
+        if 'act_estado' in data: item.act_estado = bool(data.get('act_estado'))
         db.session.commit()
         return jsonify({'item': item.to_dict()}), 200
     except Exception as e:
@@ -80,7 +89,7 @@ def update_act(act_id):
 @jwt_required()
 def delete_act(act_id):
     try:
-        item = LiturgicalAct.query.get(act_id)
+        item = ActoLiturgico.query.get(act_id)
         if not item:
             return jsonify({'error': 'No encontrado'}), 404
         db.session.delete(item)

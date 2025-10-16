@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar } from 'lucide-react';
+import { Calendar, Search, Plus, Pencil, Trash2 } from 'lucide-react';
 import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 
@@ -7,14 +7,17 @@ import { useMemo, useState } from 'react';
 import TablaBase from '../../components/Common/TablaBase';
 import ActionButton from '../../components/Common/ActionButton';
 import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
 import useLiturgicalReservations from '../../hooks/useLiturgicalReservations';
+import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
 
 const Reservations = () => {
   const { items, loading, error, createItem, updateItem, removeItem } = useLiturgicalReservations({ autoList: true });
   const [modalOpen, setModalOpen] = useState(false);
   const [mode, setMode] = useState('add');
   const [current, setCurrent] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const columns = useMemo(() => ([
     { key: 'act_id', header: 'Acto', width: '12%' },
@@ -34,8 +37,8 @@ const Reservations = () => {
   const fields = useMemo(() => ([
     { name: 'act_id', label: 'Acto (ID)', type: 'text', placeholder: 'ID del acto (opcional)' },
     { name: 'personaid', label: 'Persona (ID)', type: 'text', placeholder: 'ID de persona' },
-    { name: 'reserved_date', label: 'Fecha', type: 'text', placeholder: 'YYYY-MM-DD' },
-    { name: 'reserved_time', label: 'Hora', type: 'text', placeholder: 'HH:MM' },
+    { name: 'reserved_date', label: 'Fecha', type: 'date', placeholder: 'YYYY-MM-DD' },
+    { name: 'reserved_time', label: 'Hora', type: 'time', placeholder: 'HH:MM' },
     { name: 'status', label: 'Estado', type: 'select', options: [
       { value: 'pendiente', label: 'Pendiente' },
       { value: 'confirmada', label: 'Confirmada' },
@@ -57,8 +60,16 @@ const Reservations = () => {
   };
 
   const handleDelete = async (row) => {
-    if (!window.confirm('¿Eliminar reserva?')) return;
-    const r = await removeItem(row.id);
+    setDeleteTarget(row.id);
+    setConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    const id = deleteTarget;
+    setConfirmOpen(false);
+    setDeleteTarget(null);
+    if (!id) return;
+    const r = await removeItem(id);
     if (!r.success) alert(r.error || 'Error al eliminar');
   };
 
@@ -71,8 +82,32 @@ const Reservations = () => {
           <div className="text-sm text-gray-500">{loading ? 'Cargando...' : error ? `Error: ${error}` : `${items.length} registro(s)`}</div>
           <ActionButton icon={Plus} onClick={() => { setCurrent({ status: 'pendiente' }); setMode('add'); setModalOpen(true); }}>Nueva reserva</ActionButton>
         </div>
+        <div className="px-4 mt-4">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" style={{ color: 'var(--muted)' }} />
+            <input
+              type="text"
+              placeholder="Buscar por Acto, Persona, Estado o Notas..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 rounded-xl focus:ring-2 transition"
+              style={{ background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border)' }}
+            />
+          </div>
+        </div>
         <div className="p-4">
-          <TablaBase columns={columns} data={items} rowKey={(r) => r.id} striped headerSticky />
+          {(() => {
+            const term = (searchTerm || '').toLowerCase();
+            const filtered = (items || []).filter(r =>
+              String(r.act_id || '').toLowerCase().includes(term) ||
+              String(r.personaid || '').toLowerCase().includes(term) ||
+              String(r.status || '').toLowerCase().includes(term) ||
+              String(r.notes || '').toLowerCase().includes(term)
+            );
+            return (
+              <TablaBase columns={columns} data={filtered} rowKey={(r) => r.id} striped headerSticky />
+            );
+          })()}
         </div>
       </Card>
 
@@ -87,6 +122,16 @@ const Reservations = () => {
         onSubmit={handleSubmit}
         onClose={() => setModalOpen(false)}
         size="lg"
+      />
+
+      <DialogoConfirmacion
+        abierto={confirmOpen}
+        titulo="Eliminar reserva"
+        mensaje="¿Estás seguro de eliminar esta reserva? Esta acción no se puede deshacer."
+        onConfirmar={confirmDelete}
+        onCancelar={() => { setConfirmOpen(false); setDeleteTarget(null); }}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
       />
     </div>
   );

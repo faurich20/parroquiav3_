@@ -1,7 +1,7 @@
 from app import db
 from app.utils.security import hash_password, check_password
 from sqlalchemy.dialects.postgresql import JSON
-from datetime import datetime
+from datetime import datetime, timedelta
 
 class Role(db.Model):
     __tablename__ = 'roles'
@@ -188,6 +188,43 @@ class Persona(db.Model):
 # ==========================
 #  Liturgia
 # ==========================
+class ActoLiturgico(db.Model):
+    __tablename__ = 'actoliturgico'
+
+    actoliturgicoid = db.Column(db.Integer, primary_key=True)
+    parroquiaid = db.Column(db.Integer, db.ForeignKey('parroquia.parroquiaid'))
+    act_nombre = db.Column(db.String(100), nullable=False)
+    act_titulo = db.Column(db.String(200), nullable=False)
+    act_fecha = db.Column(db.Date, nullable=False)
+    act_hora = db.Column(db.Time, nullable=False)
+    act_descripcion = db.Column(db.Text)
+    act_estado = db.Column(db.Boolean, default=True)
+
+    parroquia = db.relationship('Parroquia')
+
+    def to_dict(self):
+        # Estado dinámico: inactivo si han pasado 2h desde act_hora en act_fecha
+        estado = bool(self.act_estado)
+        try:
+            if self.act_fecha and self.act_hora:
+                dt = datetime.combine(self.act_fecha, self.act_hora)
+                if datetime.utcnow() > dt + timedelta(hours=2):
+                    estado = False
+        except Exception:
+            pass
+
+        return {
+            'id': self.actoliturgicoid,  # compat con useCrud/TablaBase si se usa
+            'actoliturgicoid': self.actoliturgicoid,
+            'parroquiaid': self.parroquiaid,
+            'parroquia_nombre': self.parroquia.par_nombre if self.parroquia else None,
+            'act_nombre': self.act_nombre,
+            'act_titulo': self.act_titulo,
+            'act_fecha': self.act_fecha.isoformat() if self.act_fecha else None,
+            'act_hora': self.act_hora.strftime('%H:%M') if self.act_hora else None,
+            'act_descripcion': self.act_descripcion,
+            'act_estado': estado,
+        }
 class LiturgicalAct(db.Model):
     __tablename__ = 'liturgical_act'
 

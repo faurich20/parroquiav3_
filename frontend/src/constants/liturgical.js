@@ -12,3 +12,12 @@ export const LITURGICAL_TYPES = [
   { value: 'comunion', label: 'Primera Comunión' },
   { value: 'exequias', label: 'Exequias' },
 ];
+
+export const ACTO_NOMBRES = [
+  { value: 'misa', label: 'Misa' },
+  { value: 'bautismo', label: 'Bautismo' },
+  { value: 'matrimonio', label: 'Matrimonio' },
+  { value: 'confirmacion', label: 'Confirmación' },
+  { value: 'comunion', label: 'Primera Comunión' },
+  { value: 'exequias', label: 'Exequias' },
+];

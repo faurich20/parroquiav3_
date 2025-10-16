@@ -92,6 +92,8 @@ const ModalCrudGenerico = ({
       case 'text':
       case 'email':
       case 'password':
+      case 'date':
+      case 'time':
         return (
           <div key={campo.name}>
             <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
