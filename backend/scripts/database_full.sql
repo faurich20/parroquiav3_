@@ -114,6 +114,60 @@ CREATE TABLE IF NOT EXISTS public.persona (
   parroquiaid      INTEGER NOT NULL REFERENCES public.parroquia(parroquiaid) ON DELETE RESTRICT
 );
 
+-- Actos litúrgicos (nuevo esquema principal)
+CREATE TABLE IF NOT EXISTS public.actoliturgico (
+  actoliturgicoid  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  parroquiaid      INTEGER REFERENCES public.parroquia(parroquiaid) ON DELETE SET NULL,
+  act_nombre       VARCHAR(100) NOT NULL, -- misa, bautismo, etc
+  act_titulo       VARCHAR(200) NOT NULL,
+  act_fecha        DATE NOT NULL,
+  act_hora         TIME NOT NULL,
+  act_descripcion  TEXT,
+  act_estado       BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE INDEX IF NOT EXISTS idx_actoliturgico_parroquia ON public.actoliturgico(parroquiaid);
+CREATE INDEX IF NOT EXISTS idx_actoliturgico_fecha ON public.actoliturgico(act_fecha);
+
+-- Tablas litúrgicas legacy/aux (presentes en modelos del backend)
+CREATE TABLE IF NOT EXISTS public.liturgical_act (
+  id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  type       VARCHAR(50) NOT NULL,
+  title      VARCHAR(200) NOT NULL,
+  date       DATE NOT NULL,
+  time       VARCHAR(10) NOT NULL, -- HH:MM
+  location   VARCHAR(200),
+  notes      TEXT,
+  is_active  BOOLEAN NOT NULL DEFAULT TRUE,
+  parroquiaid INTEGER REFERENCES public.parroquia(parroquiaid) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_liturgical_act_date ON public.liturgical_act(date);
+
+CREATE TABLE IF NOT EXISTS public.liturgical_schedule (
+  id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  type       VARCHAR(50) NOT NULL,
+  weekday    SMALLINT NOT NULL CHECK (weekday BETWEEN 0 AND 6),
+  time       TIME NOT NULL,
+  location   VARCHAR(200),
+  is_active  BOOLEAN NOT NULL DEFAULT TRUE,
+  parroquiaid INTEGER REFERENCES public.parroquia(parroquiaid) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_liturgical_schedule_weekday ON public.liturgical_schedule(weekday);
+
+CREATE TABLE IF NOT EXISTS public.liturgical_reservation (
+  id             INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  act_id         INTEGER REFERENCES public.liturgical_act(id) ON DELETE SET NULL,
+  personaid      INTEGER REFERENCES public.persona(personaid) ON DELETE SET NULL,
+  reserved_date  DATE NOT NULL,
+  reserved_time  VARCHAR(10), -- HH:MM
+  status         VARCHAR(20) NOT NULL DEFAULT 'pendiente',
+  notes          TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_liturgical_reservation_date ON public.liturgical_reservation(reserved_date);
+
 -- =========================================================
 -- 4) Triggers de actualización de updated_at (opcional)
 -- =========================================================
