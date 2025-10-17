@@ -317,6 +317,69 @@ const ParroquiasPage = () => {
         onSubmit={handleSubmit}
         onClose={() => setIsModalOpen(false)}
         size="xl"
+        readOnlyContent={(vals) => {
+          const nombre = vals?.par_nombre || current?.par_nombre || '';
+          const direccion = vals?.par_direccion || current?.par_direccion || '';
+          const distrito = vals?.dis_nombre || current?.dis_nombre || '';
+          const provincia = vals?.prov_nombre || current?.prov_nombre || '';
+          const departamento = vals?.dep_nombre || current?.dep_nombre || '';
+          const partes = [direccion, distrito, provincia, departamento, 'Perú'].filter(Boolean);
+          const query = encodeURIComponent(partes.join(', '));
+          const mapsSrc = `https://www.google.com/maps?q=${query}&z=16&output=embed`;
+          return (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Info principal en dos columnas */}
+                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white p-4 border rounded-lg">
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Nombre</label>
+                    <div className="text-gray-900 font-medium">{nombre || '-'}</div>
+                  </div>
+                  <div className="bg-white p-4 border rounded-lg">
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Dirección</label>
+                    <div className="text-gray-900 font-medium">{direccion || '-'}</div>
+                  </div>
+                  <div className="bg-white p-4 border rounded-lg">
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Departamento</label>
+                    <div className="text-gray-900 font-medium">{departamento || '-'}</div>
+                  </div>
+                  <div className="bg-white p-4 border rounded-lg">
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Provincia</label>
+                    <div className="text-gray-900 font-medium">{provincia || '-'}</div>
+                  </div>
+                  <div className="bg-white p-4 border rounded-lg">
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Distrito</label>
+                    <div className="text-gray-900 font-medium">{distrito || '-'}</div>
+                  </div>
+                  <div className="bg-white p-4 border rounded-lg">
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Teléfonos</label>
+                    <div className="text-gray-900 font-medium">{(vals?.par_telefono1 || current?.par_telefono1 || '-') + ((vals?.par_telefono2 || current?.par_telefono2) ? ` / ${vals?.par_telefono2 || current?.par_telefono2}` : '')}</div>
+                  </div>
+                </div>
+                {/* Mapa compacto en columna lateral */}
+                <div className="bg-white p-3 border rounded-lg flex flex-col">
+                  <label className="block text-sm font-medium text-gray-500 mb-2">Ubicación</label>
+                  {partes.length ? (
+                    <div className="w-full mx-auto rounded overflow-hidden" style={{ height: 220 }}>
+                      <iframe
+                        title="Mapa de la Parroquia"
+                        src={mapsSrc}
+                        width="100%"
+                        height="100%"
+                        style={{ border: 0 }}
+                        allowFullScreen=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-gray-500 italic">Sin datos suficientes para mapa</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        }}
       />
 
       <DialogoConfirmacion

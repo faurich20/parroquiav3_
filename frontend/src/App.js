@@ -22,7 +22,7 @@ import PermissionsPage from './pages/Security/Permissions';
 import ParroquiasPage from './pages/Security/Parroquias';
 
 // Liturgical Pages
-import ManageLiturgical from './pages/Liturgical/ManageLiturgical';
+import ActoLiturgico from './pages/Liturgical/ActoLiturgico';
 import Schedules from './pages/Liturgical/Schedules';
 import Reservations from './pages/Liturgical/Reservations';
 import LiturgicalReports from './pages/Liturgical/LiturgicalReports';
@@ -73,7 +73,7 @@ const App = () => {
             <Route path="/seguridad/roles" element={<RolesPage />} />
             <Route path="/seguridad/permisos" element={<PermissionsPage />} />
             <Route path="/seguridad/parroquias" element={<ParroquiasPage />} />
-            <Route path="/liturgico/gestionar" element={<ManageLiturgical />} />
+            <Route path="/liturgico/gestionar" element={<ActoLiturgico />} />
             <Route path="/liturgico/horarios" element={<Schedules />} />
             <Route path="/liturgico/reservas" element={<Reservations />} />
             <Route path="/liturgico/reportes" element={<LiturgicalReports />} />

@@ -15,7 +15,7 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
 import { buildActionColumn } from '../../components/Common/ActionColumn';
 
-const ManageLiturgical = () => {
+const ActoLiturgico = () => {
   const { items, loading, error, list, createItem, updateItem, removeItem } = useLiturgicalActs({ autoList: true });
   const { authFetch } = useAuth();
   const [modalOpen, setModalOpen] = useState(false);
@@ -215,4 +215,4 @@ const ManageLiturgical = () => {
   );
 };
 
-export default ManageLiturgical;
+export default ActoLiturgico;
