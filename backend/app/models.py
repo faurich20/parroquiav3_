@@ -33,7 +33,6 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(50), nullable=False, default='user')
-    permissions = db.Column(JSON, default=[])
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -47,22 +46,24 @@ class User(db.Model):
         return check_password(self.password_hash, password)
     
     def to_dict(self):
-        # Resolver role_id a partir del nombre (sin FK aún)
+        # Resolver role y permisos efectivos desde Role.permissions
         role_id = None
+        permissions = []
         try:
             role_row = Role.query.filter_by(name=self.role).first() if self.role else None
             role_id = role_row.id if role_row else None
+            permissions = (role_row.permissions or []) if role_row else []
         except Exception:
-            role_id = None
+            permissions = []
 
         return {
             'id': self.id,
             'name': self.name,
             'email': self.email,
-            'role': self.role,  # compatibilidad actual
+            'role': self.role,
             'role_name': self.role,
             'role_id': role_id,
-            'permissions': self.permissions,
+            'permissions': permissions,
             'status': 'Activo' if self.is_active else 'Inactivo',
             'last_login': self.last_login.isoformat() if self.last_login else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -103,36 +104,35 @@ class Provincia(db.Model):
     __tablename__ = 'provincia'
     provinciaid = db.Column(db.Integer, primary_key=True)
     prov_nombre = db.Column(db.String, nullable=False)
+    departamentoid = db.Column(db.Integer, db.ForeignKey('departamento.departamentoid'), nullable=False)
+
+    departamento = db.relationship('Departamento', backref=db.backref('provincias', lazy=True))
 
     def to_dict(self):
-        return { 'provinciaid': self.provinciaid, 'prov_nombre': self.prov_nombre }
+        return { 'provinciaid': self.provinciaid, 'prov_nombre': self.prov_nombre, 'departamentoid': self.departamentoid }
 
 
 class Distrito(db.Model):
     __tablename__ = 'distrito'
     distritoid = db.Column(db.Integer, primary_key=True)
     dis_nombre = db.Column(db.String, nullable=False)
+    provinciaid = db.Column(db.Integer, db.ForeignKey('provincia.provinciaid'), nullable=False)
+
+    provincia = db.relationship('Provincia', backref=db.backref('distritos', lazy=True))
 
     def to_dict(self):
-        return { 'distritoid': self.distritoid, 'dis_nombre': self.dis_nombre }
+        return { 'distritoid': self.distritoid, 'dis_nombre': self.dis_nombre, 'provinciaid': self.provinciaid }
 
 
 class Departamento(db.Model):
     __tablename__ = 'departamento'
     departamentoid = db.Column(db.Integer, primary_key=True)
     dep_nombre = db.Column(db.String, nullable=False)
-    provinciaid = db.Column(db.Integer, db.ForeignKey('provincia.provinciaid'))
-    distritoid = db.Column(db.Integer, db.ForeignKey('distrito.distritoid'))
-
-    provincia = db.relationship('Provincia')
-    distrito = db.relationship('Distrito')
 
     def to_dict(self):
         return {
             'departamentoid': self.departamentoid,
             'dep_nombre': self.dep_nombre,
-            'provinciaid': self.provinciaid,
-            'distritoid': self.distritoid
         }
 
 
@@ -141,18 +141,26 @@ class Parroquia(db.Model):
     parroquiaid = db.Column(db.Integer, primary_key=True)
     par_nombre = db.Column(db.String, nullable=False)
     par_direccion = db.Column(db.String, nullable=False)
-    departamentoid = db.Column(db.Integer, db.ForeignKey('departamento.departamentoid'))
+    distritoid = db.Column(db.Integer, db.ForeignKey('distrito.distritoid'), nullable=False)
     par_telefono1 = db.Column(db.String, nullable=False)
     par_telefono2 = db.Column(db.String)
 
-    departamento = db.relationship('Departamento')
+    distrito = db.relationship('Distrito')
 
     def to_dict(self):
+        dis = self.distrito
+        prov = dis.provincia if dis else None
+        dep = prov.departamento if prov else None
         return {
             'parroquiaid': self.parroquiaid,
             'par_nombre': self.par_nombre,
             'par_direccion': self.par_direccion,
-            'departamentoid': self.departamentoid,
+            'distritoid': self.distritoid,
+            'provinciaid': prov.provinciaid if prov else None,
+            'departamentoid': dep.departamentoid if dep else None,
+            'dep_nombre': dep.dep_nombre if dep else None,
+            'prov_nombre': prov.prov_nombre if prov else None,
+            'dis_nombre': dis.dis_nombre if dis else None,
             'par_telefono1': self.par_telefono1,
             'par_telefono2': self.par_telefono2
         }

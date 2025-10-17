@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Save, Loader } from 'lucide-react';
 import ModalBase from './ModalBase';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const ModalCrudGenerico = ({
   isOpen,
@@ -13,11 +14,15 @@ const ModalCrudGenerico = ({
   validate,
   onSubmit,
   onClose,
-  size = 'md'
+  size = 'xl',
+  note,
+  readOnlyContent,
 }) => {
   const [values, setValues] = useState(initialValues);
   const [errores, setErrores] = useState('');
   const [cargando, setCargando] = useState(false);
+  const { theme } = useTheme();
+  const isDark = theme === 'black';
 
   const soloLectura = mode === 'view';
 
@@ -42,42 +47,50 @@ const ModalCrudGenerico = ({
       );
     }
     return (
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-white hover:text-gray-900"
-        >
-          Cancelar
-        </button>
-        <button
-          type="button"
-          disabled={cargando}
-          onClick={async () => {
-            try {
-              setErrores('');
-              if (typeof validate === 'function') {
-                const err = validate(values);
-                if (err) { setErrores(err); return; }
+      <div className="flex flex-col gap-2">
+        {note ? (
+          <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-3 py-2">{note}</div>
+        ) : null}
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-black hover:text-gray-900"
+            style={isDark ? { background: '#ffffff' } : undefined}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={cargando}
+            onClick={async () => {
+              try {
+                setErrores('');
+                if (typeof validate === 'function') {
+                  const maybe = validate(values);
+                  const err = (maybe && typeof maybe.then === 'function') ? await maybe : maybe;
+                  if (err) { setErrores(err); return; }
+                }
+                setCargando(true);
+                const resp = await onSubmit?.(values);
+                if (resp?.success) onClose?.();
+                else setErrores(resp?.error || 'Error al guardar');
+              } catch (e) {
+                setErrores(e.message || 'Error al guardar');
+              } finally {
+                setCargando(false);
               }
-              setCargando(true);
-              const resp = await onSubmit?.(values);
-              if (resp?.success) onClose?.();
-              else setErrores(resp?.error || 'Error al guardar');
-            } catch (e) {
-              setErrores(e.message || 'Error al guardar');
-            } finally {
-              setCargando(false);
-            }
-          }}
-          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          {cargando ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          {mode === 'add' ? 'Crear' : 'Guardar'}
-        </button>
+            }}
+            className="flex-1 px-4 py-2 text-white rounded-lg disabled:opacity-50 flex items-center justify-center gap-2 transition-all hover:brightness-110"
+            style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}
+          >
+            {cargando ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            {mode === 'add' ? 'Crear' : 'Guardar'}
+          </button>
+        </div>
       </div>
     );
-  }, [cargando, soloLectura, mode, values, validate, onSubmit, onClose]);
+  }, [cargando, soloLectura, mode, values, validate, onSubmit, onClose, note]);
 
   const renderCampo = (campo) => {
     const value = values[campo.name];
@@ -170,9 +183,13 @@ const ModalCrudGenerico = ({
         {errores ? (
           <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">{errores}</div>
         ) : null}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {fields.map((f) => renderCampo(f))}
-        </div>
+        {soloLectura && typeof readOnlyContent === 'function' ? (
+          <div className="space-y-4">{readOnlyContent(values)}</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {fields.map((f) => renderCampo(f))}
+          </div>
+        )}
       </div>
     </ModalBase>
   );

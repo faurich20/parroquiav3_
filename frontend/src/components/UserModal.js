@@ -231,7 +231,6 @@ const UserModal = ({ isOpen, mode, user, onClose, onSubmit }) => {
                 name: formData.name.trim(),
                 email: formData.email.trim().toLowerCase(),
                 role: formData.role,
-                permissions: ['menu_principal', 'personal'],
                 // status omitido: backend lo asume Activo
                 persona: {
                     per_nombres: (formData.per_nombres || formData.name).trim(),

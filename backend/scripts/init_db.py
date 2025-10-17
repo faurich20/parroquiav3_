@@ -92,8 +92,9 @@ class DatabaseManager:
             return False
     
     def initialize_tables_and_data(self):
-        """Ejecuta el SQL completo y deja que app/__init__.py haga el seed"""
+        """Ejecuta el SQL de esquema y los seeds, y asegura credenciales del admin"""
         sql_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'database_full.sql'))
+        seed_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'seed_inserts.txt'))
         if not os.path.exists(sql_path):
             print(f"❌ No se encontró el archivo SQL: {sql_path}")
             return False
@@ -124,12 +125,56 @@ class DatabaseManager:
             traceback.print_exc()
             return False
 
-        # 2) Dejar que create_app haga db.create_all() y el seed (usuario Admin + entidades)
+        # 2) Ejecutar seeds de datos si existe el archivo
         try:
-            print("⚙️ Ejecutando create_app() para aplicar create_all y seed...")
+            if os.path.exists(seed_path):
+                print(f"🌱 Ejecutando seeds: {seed_path}")
+                with open(seed_path, 'r', encoding='utf-8') as f:
+                    seed_sql = f.read()
+                conn = psycopg2.connect(
+                    host=self.db_config['host'],
+                    port=self.db_config['port'],
+                    user=self.db_config['user'],
+                    password=self.db_config['password'],
+                    database='parroquia_db'
+                )
+                conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+                cur = conn.cursor()
+                cur.execute("SET client_encoding TO 'UTF8'")
+                cur.execute(seed_sql)
+                cur.close()
+                conn.close()
+                print("✅ Seeds ejecutados correctamente")
+            else:
+                print("ℹ️ No se encontró seed_inserts.txt; se omitió la inserción inicial de datos")
+        except Exception as e:
+            print(f"❌ Error ejecutando seeds: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+        # 3) Crear app, aplicar create_all() y asegurar hash del admin
+        try:
+            print("⚙️ Ejecutando create_app() para aplicar create_all y asegurar admin...")
             app = create_app()
-            # create_app ya ejecuta db.create_all() y el seed dentro de su app_context
-            print("✅ Inicialización de app completada (create_all + seed)")
+            # Asegurar hash válido del admin usando util de la app
+            with app.app_context():
+                from app.models import User
+                from app.utils.security import hash_password
+                # Asegurar existencia y hash de admin
+                admin = User.query.filter_by(email='admin@parroquia.com').first()
+                if admin:
+                    admin.password_hash = hash_password('Admin123!')
+                    db.session.commit()
+                    print("✅ Admin actualizado con hash bcrypt válido")
+                else:
+                    # Crear si no existe (rol/admin por defecto)
+                    u = User(name='Admin', email='admin@parroquia.com', role='admin', permissions=[])
+                    u.password_hash = hash_password('Admin123!')
+                    db.session.add(u)
+                    db.session.commit()
+                    print("✅ Admin creado con hash bcrypt válido")
+            print("✅ Inicialización de app completada")
             return True
         except Exception as e:
             print(f"❌ Error inicializando app/seed: {e}")

@@ -109,20 +109,11 @@ def create_user():
             print(f"❌ Rol inexistente en catálogo: {role}")
             return jsonify({'error': 'Rol no válido. Debe existir en el catálogo de roles'}), 400
         
-        # Permisos: si no vienen explícitos, heredar del rol si existe; si no, usar ['menu_principal']
-        incoming_permissions = data.get('permissions')
-        if not incoming_permissions:
-            role_row = Role.query.filter_by(name=role).first()
-            effective_permissions = (role_row.permissions if role_row and role_row.permissions else ['menu_principal'])
-        else:
-            effective_permissions = incoming_permissions
-
         # Crear nuevo usuario
         new_user = User(
             name=name,
             email=email,
             role=role,
-            permissions=effective_permissions,
             is_active=data.get('status', 'Activo') == 'Activo'
         )
         new_user.set_password(password)
@@ -210,10 +201,7 @@ def update_user(user_id):
             if not role_row:
                 return jsonify({'error': 'Rol no válido. Debe existir en el catálogo de roles'}), 400
             user.role = new_role_name
-        if 'permissions' in data:
-            incoming_perms = data['permissions'] or []
-            # Filtrar contra catálogo de permisos del backend
-            user.permissions = [p for p in incoming_perms if p in PERMISOS]
+        # Ignorar cambios directos de permisos de usuario (permisos se derivan del rol)
         if 'status' in data:
             user.is_active = data['status'] == 'Activo'
         

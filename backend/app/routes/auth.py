@@ -236,12 +236,11 @@ def register():
         if User.query.filter_by(email=email).first():
             return jsonify({'error': 'El usuario ya existe'}), 409
         
-        # Crear nuevo usuario
+        # Crear nuevo usuario (permisos se derivan del rol)
         new_user = User(
             name=name,
             email=email,
-            role='user',
-            permissions=['dashboard']
+            role='user'
         )
         new_user.set_password(password)
         

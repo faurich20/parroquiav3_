@@ -42,7 +42,6 @@ CREATE TABLE IF NOT EXISTS public.users (
   email          VARCHAR(120) NOT NULL UNIQUE,
   password_hash  VARCHAR(255) NOT NULL,
   role           VARCHAR(50)  NOT NULL DEFAULT 'user',
-  permissions    JSONB NOT NULL DEFAULT '[]'::jsonb,
   is_active      BOOLEAN NOT NULL DEFAULT TRUE,
   created_at     TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
@@ -70,36 +69,84 @@ CREATE TABLE IF NOT EXISTS public.user_preferences (
   data     JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 
+-- =========================================================
+-- 3B) Defaults de permisos para roles y usuarios
+--     - admin: todos los permisos del catálogo (según frontend/backend)
+--     - user: solo menu_principal
+--     - usuarios con permissions vacíos heredan del rol
+-- =========================================================
+
+-- Upsert de roles base con permisos por defecto
+INSERT INTO public.roles (name, description, permissions, is_active)
+VALUES
+  (
+    'admin',
+    'Administrador del sistema',
+    '[
+      "menu_principal",
+      "seguridad",
+      "personal",
+      "liturgico",
+      "contabilidad",
+      "ventas",
+      "compras",
+      "almacen",
+      "configuracion",
+      "reportes"
+    ]'::jsonb,
+    TRUE
+  ),
+  (
+    'user',
+    'Usuario estándar',
+    '["menu_principal"]'::jsonb,
+    TRUE
+  )
+ON CONFLICT (name) DO UPDATE SET permissions = EXCLUDED.permissions;
+
+-- El proyecto usa permisos sólo desde roles; no se almacenan en users
+
+-- Limpieza defensiva si existiera la columna antigua en entornos viejos
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'permissions'
+  ) THEN
+    ALTER TABLE public.users DROP COLUMN permissions;
+  END IF;
+END $$;
+
 -- Geo/Parroquia
 
--- Provincia
-CREATE TABLE IF NOT EXISTS public.provincia (
-  provinciaid  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  prov_nombre  VARCHAR NOT NULL
-);
-
--- Distrito
-CREATE TABLE IF NOT EXISTS public.distrito (
-  distritoid  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  dis_nombre  VARCHAR NOT NULL
-);
-
--- Departamento (relaciones con provincia y distrito)
+-- Departamento
 CREATE TABLE IF NOT EXISTS public.departamento (
   departamentoid  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  dep_nombre      VARCHAR NOT NULL,
-  provinciaid     INTEGER REFERENCES public.provincia(provinciaid),
-  distritoid      INTEGER REFERENCES public.distrito(distritoid)
+  dep_nombre      VARCHAR NOT NULL
 );
 
--- Parroquia (relación con departamento)
+-- Provincia (N:1 con Departamento)
+CREATE TABLE IF NOT EXISTS public.provincia (
+  provinciaid     INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  prov_nombre     VARCHAR NOT NULL,
+  departamentoid  INTEGER NOT NULL REFERENCES public.departamento(departamentoid)
+);
+
+-- Distrito (N:1 con Provincia)
+CREATE TABLE IF NOT EXISTS public.distrito (
+  distritoid   INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  dis_nombre   VARCHAR NOT NULL,
+  provinciaid  INTEGER NOT NULL REFERENCES public.provincia(provinciaid)
+);
+
+-- Parroquia (N:1 con Distrito)
 CREATE TABLE IF NOT EXISTS public.parroquia (
-  parroquiaid   INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  par_nombre    VARCHAR NOT NULL,
-  par_direccion VARCHAR NOT NULL,
-  departamentoid INTEGER REFERENCES public.departamento(departamentoid),
-  par_telefono1 VARCHAR NOT NULL,
-  par_telefono2 VARCHAR
+  parroquiaid    INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  par_nombre     VARCHAR NOT NULL,
+  par_direccion  VARCHAR NOT NULL,
+  distritoid     INTEGER NOT NULL REFERENCES public.distrito(distritoid),
+  par_telefono1  VARCHAR NOT NULL,
+  par_telefono2  VARCHAR
 );
 
 -- Persona (1:1 con users por userid; pertenece a parroquia)

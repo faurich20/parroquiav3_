@@ -52,7 +52,8 @@ const Sidebar = ({ collapsed, toggleCollapse }) => {
     children: [
       { title: 'Usuarios', path: '/seguridad/usuarios', icon: Users },
       { title: 'Roles', path: '/seguridad/roles', icon: Shield },
-      { title: 'Permisos', path: '/seguridad/permisos', icon: Settings }
+      { title: 'Permisos', path: '/seguridad/permisos', icon: Settings },
+      { title: 'Parroquias', path: '/seguridad/parroquias', icon: Church }
     ]
   },
   { id: 'configuration', title: 'Módulo Configuración', icon: Settings, path: '/configuracion', permission: 'configuracion' }

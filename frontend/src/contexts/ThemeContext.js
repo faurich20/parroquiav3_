@@ -43,6 +43,9 @@ export const ThemeProvider = ({ children }) => {
         // Ajustes de contraste de superficie/texto según tema
         const isDark = pal.id === 'black';
         if (isDark) {
+          // Forzar acentos azules en tema negro para botones/íconos temáticos
+          document.documentElement.style.setProperty('--primary', '#2563eb'); // azul
+          document.documentElement.style.setProperty('--secondary', '#7c3aed'); // morado complementario
           document.documentElement.style.setProperty('--surface', '#0b0f19'); // slate-950 aproximado
           document.documentElement.style.setProperty('--surface-2', '#111827'); // slate-800/gray-900
           document.documentElement.style.setProperty('--text', '#f8fafc'); // slate-50

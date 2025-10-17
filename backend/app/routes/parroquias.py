@@ -18,7 +18,7 @@ def create_parroquia():
     p = Parroquia(
         par_nombre=data.get('par_nombre','').strip(),
         par_direccion=data.get('par_direccion','').strip(),
-        departamentoid=data.get('departamentoid'),
+        distritoid=data.get('distritoid'),
         par_telefono1=data.get('par_telefono1','').strip(),
         par_telefono2=data.get('par_telefono2')
     )
@@ -35,7 +35,7 @@ def update_parroquia(parroquiaid):
     data = request.get_json() or {}
     for k in ['par_nombre','par_direccion','par_telefono1','par_telefono2']:
         if k in data: setattr(p, k, data[k])
-    if 'departamentoid' in data: p.departamentoid = data['departamentoid']
+    if 'distritoid' in data: p.distritoid = data['distritoid']
     db.session.commit()
     return jsonify({'parroquia': p.to_dict()})
 

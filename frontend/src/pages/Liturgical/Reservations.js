@@ -9,6 +9,7 @@ import ActionButton from '../../components/Common/ActionButton';
 import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico';
 import useLiturgicalReservations from '../../hooks/useLiturgicalReservations';
 import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
+import { buildActionColumn } from '../../components/Common/ActionColumn';
 
 const Reservations = () => {
   const { items, loading, error, createItem, updateItem, removeItem } = useLiturgicalReservations({ autoList: true });
@@ -26,12 +27,13 @@ const Reservations = () => {
     { key: 'reserved_time', header: 'Hora', width: '10%', align: 'center' },
     { key: 'status', header: 'Estado', width: '14%' },
     { key: 'notes', header: 'Notas', width: '26%' },
-    { key: 'actions', header: 'Acciones', width: '14%', align: 'right', render: (row) => (
-      <div className="flex justify-end gap-2">
-        <ActionButton color="blue" icon={Pencil} onClick={() => { setCurrent(row); setMode('edit'); setModalOpen(true); }}>Editar</ActionButton>
-        <ActionButton color="red" icon={Trash2} onClick={() => handleDelete(row)}>Eliminar</ActionButton>
-      </div>
-    )}
+    buildActionColumn({
+      onEdit: (row) => { setCurrent(row); setMode('edit'); setModalOpen(true); },
+      onDelete: (row) => handleDelete(row),
+      onView: undefined,
+      width: '14%',
+      align: 'right'
+    })
   ]), []);
 
   const fields = useMemo(() => ([

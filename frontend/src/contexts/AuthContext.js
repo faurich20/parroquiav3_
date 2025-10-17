@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useTheme } from './ThemeContext';
 import { createPortal } from 'react-dom';
+import SessionWarningModal from '../components/Common/SessionWarningModal';
 
 const AuthContext = createContext();
 // Evita re-render de la app cuando el Provider cambia estado interno no relevante
@@ -536,30 +537,11 @@ export const AuthProvider = ({ children }) => {
 
       {/* 🔔 Modal de inactividad en Portal para aislar del árbol principal */}
       {sessionExpiring && createPortal(
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
-          <div className="bg-white p-6 rounded-2xl shadow-lg text-center max-w-sm">
-            <h2 className="text-lg font-semibold mb-2 text-gray-800">
-              Sesión a punto de expirar
-            </h2>
-            <p className="text-gray-600 mb-4">
-              Tu sesión se cerrará automáticamente en {COUNTDOWN_SECONDS} segundos por inactividad.
-            </p>
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={extendSession}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              >
-                Mantener sesión
-              </button>
-              <button
-                onClick={logout}
-                className="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400"
-              >
-                Cerrar ahora
-              </button>
-            </div>
-          </div>
-        </div>,
+        <SessionWarningModal
+          open={sessionExpiring}
+          onContinue={extendSession}
+          onLogout={logout}
+        />,
         document.body
       )}
     </AuthContext.Provider>

@@ -1,0 +1,93 @@
+-- Seed Inserts for core tables
+-- Tables: roles, users, departamento, provincia, distrito, parroquia, persona, actoliturgico
+-- Nota: password_hash usa bcrypt para la contraseña 'Admin123!'. Si tu hashing difiere, reemplaza el hash.
+
+BEGIN;
+
+-- Roles
+INSERT INTO public.roles (name, description, permissions, is_active)
+VALUES
+  ('admin', 'Administrador del sistema', '[]'::jsonb, TRUE),
+  ('user',  'Usuario estándar',         '[]'::jsonb, TRUE)
+ON CONFLICT (name) DO NOTHING;
+
+-- Usuarios (password_hash = bcrypt('Admin123!'))
+-- Hash generado de ejemplo (cost=12). Cambia si tu implementación usa otro algoritmo.
+INSERT INTO public.users (name, email, password_hash, role, is_active)
+VALUES
+  ('Admin', 'admin@parroquia.com', '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'admin', TRUE),
+  ('María Pérez', 'maria@example.com', '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'user', TRUE),
+  ('Juan López',  'juan@example.com',  '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'user', TRUE)
+ON CONFLICT (email) DO NOTHING;
+
+-- Departamento
+INSERT INTO public.departamento (dep_nombre)
+VALUES ('LAMBAYEQUE')
+ON CONFLICT DO NOTHING;
+
+-- Provincia (LAMBAYEQUE)
+INSERT INTO public.provincia (prov_nombre, departamentoid)
+SELECT 'LAMBAYEQUE', d.departamentoid
+FROM public.departamento d
+WHERE d.dep_nombre = 'LAMBAYEQUE'
+ON CONFLICT DO NOTHING;
+
+-- Distritos (LAMBAYEQUE, CHICLAYO, JOSE LEONARDO ORTIZ)
+INSERT INTO public.distrito (dis_nombre, provinciaid)
+SELECT v.dis_nombre, p.provinciaid
+FROM (
+  VALUES
+    ('LAMBAYEQUE'),
+    ('CHICLAYO'),
+    ('JOSE LEONARDO ORTIZ')
+) AS v(dis_nombre)
+JOIN public.provincia p ON p.prov_nombre = 'LAMBAYEQUE'
+ON CONFLICT DO NOTHING;
+
+-- Parroquias (una por distrito)
+INSERT INTO public.parroquia (par_nombre, par_direccion, distritoid, par_telefono1, par_telefono2)
+SELECT v.par_nombre, v.par_direccion, d.distritoid, v.tel1, v.tel2
+FROM (
+  VALUES
+    ('Parroquia Catedral de Lambayeque', 'Plaza Principal S/N', 'LAMBAYEQUE', '074-200001', NULL),
+    ('Parroquia San Antonio de Chiclayo', 'Av. Principal 123',  'CHICLAYO',   '074-200002', '074-200102'),
+    ('Parroquia Sagrado Corazón - JLO',   'Jr. Central 456',    'JOSE LEONARDO ORTIZ', '074-200003', NULL)
+) AS v(par_nombre, par_direccion, distrito_nom, tel1, tel2)
+JOIN public.distrito d ON d.dis_nombre = v.distrito_nom
+ON CONFLICT DO NOTHING;
+
+-- Personas (una asociada al admin y otras sin usuario)
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid)
+SELECT u.id, 'Administrador', 'General', 'Av. Admin 100', '999999999', DATE '1980-01-01', pr.parroquiaid
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Catedral de Lambayeque'
+WHERE u.email = 'admin@parroquia.com'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid)
+SELECT NULL, 'María', 'Pérez', 'Calle 1', '987654321', DATE '1990-05-10', pr.parroquiaid
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia San Antonio de Chiclayo'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid)
+SELECT NULL, 'Juan', 'López', 'Av. 2', '912345678', DATE '1988-07-22', pr.parroquiaid
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Sagrado Corazón - JLO'
+ON CONFLICT DO NOTHING;
+
+-- Actos Litúrgicos (ejemplos)
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_fecha, act_hora, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'misa', 'Misa Dominical', CURRENT_DATE + INTERVAL '1 day', TIME '09:00', 'Misa principal', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_fecha, act_hora, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'bautismo', 'Bautismos Comunitarios', CURRENT_DATE + INTERVAL '2 day', TIME '11:00', 'Bautismos del mes', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia San Antonio de Chiclayo'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_fecha, act_hora, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'misa', 'Misa Vespertina', CURRENT_DATE + INTERVAL '3 day', TIME '18:30', 'Misa para jóvenes', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Sagrado Corazón - JLO'
+ON CONFLICT DO NOTHING;
+
+COMMIT;

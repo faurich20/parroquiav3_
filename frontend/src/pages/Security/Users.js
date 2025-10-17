@@ -1,14 +1,17 @@
 // parroquia-frontend/src/pages/Security/User.js
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Plus, Search, Edit, Trash2, Shield, Loader, Eye } from 'lucide-react';
+import { Users, Plus, Search, Edit, Trash2, Shield, Loader, Eye, EyeOff } from 'lucide-react';
 import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 import ActionButton from '../../components/Common/ActionButton';
 import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
-import UserModal from "../../components/Modals/UserModal";
+import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico';
 import useCrud from '../../hooks/useCrud';
 import TablaBase from '../../components/Common/TablaBase';
+import SelectorRol from '../../components/Form/SelectorRol';
+import { useAuth } from '../../contexts/AuthContext';
+import { buildActionColumn } from '../../components/Common/ActionColumn';
 
 const UsersPage = () => {
     const [searchTerm, setSearchTerm] = useState('');
@@ -20,6 +23,32 @@ const UsersPage = () => {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const itemsPerPage = 7;
+    const { authFetch } = useAuth();
+    const [rolesList, setRolesList] = useState([]);
+    const [parroquias, setParroquias] = useState([]);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const validRoles = ['admin', 'secretaria', 'tesorero', 'colaborador', 'user'];
+
+    React.useEffect(() => {
+        const loadRoles = async () => {
+            try {
+                const resp = await authFetch('http://localhost:5000/api/roles');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                setRolesList(Array.isArray(data.roles) ? data.roles : []);
+            } catch {}
+        };
+        const loadParroquias = async () => {
+            try {
+                const resp = await authFetch('http://localhost:5000/api/parroquias');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                setParroquias(Array.isArray(data.parroquias) ? data.parroquias : []);
+            } catch {}
+        };
+        if (isModalOpen) { loadRoles(); loadParroquias(); }
+    }, [isModalOpen, authFetch]);
 
     // Funciones para abrir modales
     const openAddModal = () => {
@@ -52,18 +81,29 @@ const UsersPage = () => {
         return resp.success ? { success: true } : { success: false, error: resp.error };
     };
 
-    // Centralizar submit del modal
-    const handleModalSubmit = async (userData, action) => {
-        try {
-            if (action === 'create') {
-                return await handleCreateUser(userData);
-            } else if (action === 'edit') {
-                return await handleEditUser(selectedUser?.id, userData);
-            }
-        } catch (error) {
-            console.error('Error en handleModalSubmit:', error);
-            return { success: false, error: error.message };
+    const checkEmailExists = async (email) => {
+        const endpoints = [
+            `http://localhost:5000/api/users/exists?email=${encodeURIComponent(email)}`,
+            `http://localhost:5000/api/users/check-email?email=${encodeURIComponent(email)}`,
+            `http://localhost:5000/api/users?email=${encodeURIComponent(email)}`,
+        ];
+        for (const url of endpoints) {
+            try {
+                const resp = await authFetch(url, { method: 'GET' });
+                if (!resp.ok) continue;
+                const data = await resp.json();
+                if (Array.isArray(data)) {
+                    return data.some(u => (u.email || '').toLowerCase() === email.toLowerCase());
+                }
+                if (data && typeof data === 'object') {
+                    if (typeof data.exists === 'boolean') return data.exists;
+                    if (typeof data.found === 'boolean') return data.found;
+                    if (typeof data.available === 'boolean') return !data.available;
+                    if (Array.isArray(data.users)) return data.users.some(u => (u.email || '').toLowerCase() === email.toLowerCase());
+                }
+            } catch {}
         }
+        return false;
     };
 
     const handleStatusChange = async (userId, currentStatus) => {
@@ -203,20 +243,12 @@ const UsersPage = () => {
                                 </div>
                             )
                         },
-                        {
-                            key: 'ultimo', header: 'Último Acceso', width: '15%', render: (user) => (
-                                <span>{user.last_login ? new Date(user.last_login).toLocaleString('es-ES') : 'Nunca'}</span>
-                            )
-                        },
-                        {
-                            key: 'acciones', header: 'Acciones', width: '35%', align: 'center', render: (user) => (
-                                <div className="flex items-center justify-center gap-2">
-                                    <ActionButton color="theme" icon={Edit} onClick={() => openEditModal(user)} title="Editar usuario">Editar</ActionButton>
-                                    <ActionButton color="red" icon={Trash2} onClick={() => requestDeleteUser(user.id)} title="Eliminar usuario">Eliminar</ActionButton>
-                                    <ActionButton color="blue" icon={Eye} onClick={() => openViewModal(user)} title="Ver más">Ver más</ActionButton>
-                                </div>
-                            )
-                        }
+                        buildActionColumn({
+                            onEdit: (row) => openEditModal(row),
+                            onDelete: (row) => requestDeleteUser(row.id),
+                            onView: (row) => openViewModal(row),
+                            width: '35%'
+                        })
                     ];
                     return (
                         <TablaBase
@@ -231,28 +263,8 @@ const UsersPage = () => {
                 })()}
 
                 {/* Paginación */}
-                <div className="flex items-center justify-between mt-4">
+                <div className="flex items-center justify-between mt-6">
                     <div className="flex items-center gap-2">
-                        <span className="text-sm" style={{ color: 'var(--muted)' }}>Página</span>
-                        <input
-                            type="number"
-                            min={1}
-                            max={totalPages || 1}
-                            value={currentPage}
-                            onChange={(e) => {
-                                const n = parseInt(e.target.value || '1', 10);
-                                if (Number.isNaN(n)) return;
-                                const max = totalPages || 1;
-                                const clamped = Math.max(1, Math.min(n, max));
-                                setCurrentPage(clamped);
-                            }}
-                            className="w-14 px-2 py-1 rounded-lg text-center text-sm"
-                            style={{ background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border)' }}
-                        />
-                        <span className="text-sm" style={{ color: 'var(--muted)' }}>de {totalPages || 1}</span>
-                    </div>
-
-                    <div className="flex gap-2">
                         <button
                             onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                             disabled={currentPage === 1}
@@ -290,12 +302,196 @@ const UsersPage = () => {
             </Card>
 
             {/* Modal unificado */}
-            <UserModal
+            <ModalCrudGenerico
                 isOpen={isModalOpen}
                 mode={modalMode}
-                user={selectedUser}
+                title={modalMode === 'add' ? 'Nuevo Usuario' : modalMode === 'edit' ? 'Editar Usuario' : 'Información del Usuario'}
+                icon={Users}
+                initialValues={selectedUser ? {
+                    name: selectedUser.name || '',
+                    email: selectedUser.email || '',
+                    role: typeof selectedUser.role === 'object' ? (selectedUser.role.name || 'user') : (selectedUser.role || 'user'),
+                    password: '',
+                    confirmPassword: '',
+                    per_nombres: selectedUser.persona?.per_nombres || selectedUser.name || '',
+                    per_apellidos: selectedUser.persona?.per_apellidos || '',
+                    per_domicilio: selectedUser.persona?.per_domicilio || '',
+                    per_telefono: selectedUser.persona?.per_telefono || '',
+                    fecha_nacimiento: selectedUser.persona?.fecha_nacimiento || '',
+                    parroquiaid: selectedUser.persona?.parroquiaid || ''
+                } : {
+                    name: '', email: '', role: 'user', password: '', confirmPassword: '', per_nombres: '', per_apellidos: '', per_domicilio: '', per_telefono: '', fecha_nacimiento: '', parroquiaid: ''
+                }}
+                fields={[
+                    { name: 'name', label: 'Nombre de usuario o alias *', type: 'text' },
+                    { name: 'email', label: 'Correo electrónico *', type: 'email' },
+                    {
+                        name: 'role',
+                        label: 'Rol *',
+                        type: 'custom',
+                        render: (value, setValue, form, disabled) => (
+                            <div key="role">
+                                <label className="block text-sm font-medium text-gray-500 mb-1">Rol *</label>
+                                <SelectorRol value={value} onChange={setValue} disabled={disabled} className="text-gray-900" roles={rolesList.length ? rolesList.map(r => r.name) : validRoles} />
+                            </div>
+                        )
+                    },
+                    {
+                        name: 'password',
+                        label: 'Contraseña',
+                        type: 'custom',
+                        render: (value, setValue) => (
+                            <div key="password">
+                                <label className="block text-sm font-medium text-gray-500 mb-1">{modalMode === 'add' ? 'Contraseña *' : 'Contraseña (dejar vacío para no cambiar)'}</label>
+                                <div className="relative">
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        value={value || ''}
+                                        onChange={(e) => setValue(e.target.value)}
+                                        required={modalMode === 'add'}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10 text-gray-900"
+                                    />
+                                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+                        )
+                    },
+                    {
+                        name: 'confirmPassword',
+                        label: 'Confirmar contraseña',
+                        type: 'custom',
+                        render: (value, setValue, form) => (
+                            (modalMode === 'add' || form.password) ? (
+                                <div key="confirmPassword">
+                                    <label className="block text-sm font-medium text-gray-500 mb-1">Confirmar contraseña *</label>
+                                    <div className="relative">
+                                        <input
+                                            type={showConfirmPassword ? 'text' : 'password'}
+                                            value={value || ''}
+                                            onChange={(e) => setValue(e.target.value)}
+                                            required
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10 text-gray-900"
+                                        />
+                                        <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                                            {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : null
+                        )
+                    },
+                    { name: 'per_nombres', label: 'Nombres *', type: 'text' },
+                    { name: 'per_apellidos', label: 'Apellidos *', type: 'text' },
+                    { name: 'fecha_nacimiento', label: 'Fecha de nacimiento *', type: 'date' },
+                    {
+                        name: 'parroquiaid',
+                        label: 'Parroquia *',
+                        type: 'select',
+                        options: [{ value: '', label: 'Seleccione una parroquia' }, ...parroquias.map(p => ({ value: p.parroquiaid, label: p.par_nombre }))]
+                    },
+                    { name: 'per_domicilio', label: 'Domicilio', type: 'text' },
+                    { name: 'per_telefono', label: 'Teléfono', type: 'text' },
+                ]}
+                validate={async (v) => {
+                    if (!v.name || !v.name.trim()) return 'El nombre es requerido';
+                    if (v.name.length < 3) return 'El nombre debe tener al menos 3 caracteres';
+                    if (v.name.length > 100) return 'El nombre no puede superar 100 caracteres';
+                    if (!v.email || !v.email.trim()) return 'El email es requerido';
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(v.email)) return 'Formato de email inválido';
+                    if (modalMode === 'add' || v.password) {
+                        if (!v.password) return 'La contraseña es requerida';
+                        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+                        if (!passwordRegex.test(v.password)) return 'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial';
+                        if (v.password !== v.confirmPassword) return 'Las contraseñas no coinciden';
+                    }
+                    const rolesValidos = rolesList.length ? rolesList.map(r => r.name) : validRoles;
+                    if (!rolesValidos.includes(v.role)) return 'Rol inválido';
+                    if (modalMode === 'add') {
+                        if (!v.per_nombres?.trim()) return 'Los nombres de la persona son requeridos';
+                        if (!v.per_apellidos?.trim()) return 'Los apellidos de la persona son requeridos';
+                        if (!v.fecha_nacimiento) return 'La fecha de nacimiento es requerida';
+                        if (!v.parroquiaid) return 'La parroquia es requerida';
+                    }
+                    const emailToCheck = v.email.trim().toLowerCase();
+                    const original = (selectedUser?.email || '').toLowerCase();
+                    if (modalMode === 'add' || (modalMode === 'edit' && emailToCheck !== original)) {
+                        const exists = await checkEmailExists(emailToCheck);
+                        if (exists) return 'El email ya está registrado';
+                    }
+                    return null;
+                }}
+                onSubmit={async (vals) => {
+                    const userData = {
+                        name: vals.name.trim(),
+                        email: vals.email.trim().toLowerCase(),
+                        role: vals.role,
+                        persona: {
+                            per_nombres: (vals.per_nombres || vals.name).trim(),
+                            per_apellidos: (vals.per_apellidos || '').trim(),
+                            per_domicilio: (vals.per_domicilio || '').trim(),
+                            per_telefono: (vals.per_telefono || '').trim(),
+                            fecha_nacimiento: vals.fecha_nacimiento || null,
+                            parroquiaid: vals.parroquiaid ? Number(vals.parroquiaid) : null
+                        }
+                    };
+                    if (modalMode === 'add') userData.password = vals.password;
+                    else if (vals.password) userData.password = vals.password;
+                    if (modalMode === 'add') return await handleCreateUser(userData);
+                    if (modalMode === 'edit') return await handleEditUser(selectedUser?.id, userData);
+                    return { success: false, error: 'Modo no soportado' };
+                }}
                 onClose={() => setIsModalOpen(false)}
-                onSubmit={handleModalSubmit}
+                size="xl"
+                readOnlyContent={(vals) => (
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-center space-x-4 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg">
+                            <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-lg">
+                                {(selectedUser?.name || vals.name || 'U').charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-bold text-gray-900">{selectedUser?.name || vals.name || 'Usuario sin nombre'}</h3>
+                                <p className="text-gray-600">{selectedUser?.email || vals.email || 'Sin email'}</p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div className="bg-white p-4 border rounded-lg">
+                                    <label className="block text-sm font-medium text-gray-500 mb-2">Rol del usuario</label>
+                                    <div className="flex items-center">
+                                        <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+                                        <span className="text-lg font-medium text-gray-900">{typeof selectedUser?.role === 'object' ? (selectedUser?.role?.name) : (selectedUser?.role || vals.role)}</span>
+                                    </div>
+                                </div>
+                                <div className="bg-white p-4 border rounded-lg">
+                                    <label className="block text-sm font-medium text-gray-500 mb-2">Estado actual</label>
+                                    <span className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${String(selectedUser?.status || 'inactivo').toLowerCase() === 'activo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                                        {String(selectedUser?.status || 'inactivo').toLowerCase() === 'activo' ? 'Activo' : 'Inactivo'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="bg-white p-4 border rounded-lg">
+                                <label className="block text-sm font-medium text-gray-500 mb-3">Permisos asignados ({selectedUser?.permissions?.length || 0})</label>
+                                {selectedUser?.permissions && selectedUser.permissions.length > 0 ? (
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {selectedUser.permissions.map((permission, index) => (
+                                            <div key={index} className="flex items-center p-3 bg-blue-50 rounded-lg border border-blue-100">
+                                                <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                                                <span className="text-sm text-blue-800 font-medium">{permission}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center p-3 bg-gray-50 rounded-lg">
+                                        <span className="text-gray-500 italic">No hay permisos asignados</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
             />
 
             {/* Diálogo de confirmación */}

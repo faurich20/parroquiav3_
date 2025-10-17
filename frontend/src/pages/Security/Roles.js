@@ -10,6 +10,7 @@ import TablaBase from '../../components/Common/TablaBase';
 import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico.js';
 import ListaPermisos from '../../components/Form/ListaPermisos.js';
 import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
+import { buildActionColumn } from '../../components/Common/ActionColumn';
 
 const RolesPage = () => {
     const { authFetch } = useAuth();
@@ -148,6 +149,25 @@ const RolesPage = () => {
         setModalAbierto(true);
     };
 
+    const abrirVer = (rol) => {
+        setModoModal('ver');
+        setRolSeleccionado(rol);
+        const permisosNormalizados = Array.isArray(rol.permissions)
+            ? rol.permissions.map((p) => {
+                if (typeof p === 'string') return p;
+                if (p && typeof p === 'object') return p.id || p.name || '';
+                return '';
+              }).filter(Boolean)
+            : [];
+        setValoresIniciales({
+            nombre: rol.name || '',
+            descripcion: rol.description || '',
+            permisos: permisosNormalizados,
+            estado: rol.status || 'Activo'
+        });
+        setModalAbierto(true);
+    };
+
     const cerrarModal = () => {
         setModalAbierto(false);
         setErrorLocal('');
@@ -258,11 +278,11 @@ const RolesPage = () => {
                 </div>
                 {(() => {
                     const columns = [
-                        { key: 'nombre', header: 'Nombre', render: (r) => r.name },
-                        { key: 'descripcion', header: 'Descripción', render: (r) => (<span style={{ color: 'var(--muted)' }}>{r.description || '-'}</span>) },
-                        { key: 'permisos', header: 'Permisos', align: 'center', render: (r) => (r.permissions || []).length },
+                        { key: 'nombre', header: 'Nombre', width: '22%', render: (r) => r.name },
+                        { key: 'descripcion', header: 'Descripción', width: '28%', render: (r) => (<span style={{ color: 'var(--muted)' }}>{r.description || '-'}</span>) },
+                        { key: 'permisos', header: 'Permisos', width: '10%', align: 'center', render: (r) => (r.permissions || []).length },
                         {
-                            key: 'estado', header: 'Estado', align: 'center', render: (r) => (
+                            key: 'estado', header: 'Estado', width: '10%', align: 'center', render: (r) => (
                                 <div className="flex flex-col items-center gap-1">
                                     <span className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${String(r.status).toLowerCase() === 'activo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
                                         {String(r.status).toLowerCase() === 'activo' ? 'Activo' : 'Inactivo'}
@@ -276,14 +296,12 @@ const RolesPage = () => {
                                 </div>
                             )
                         },
-                        {
-                            key: 'acciones', header: 'Acciones', align: 'center', render: (r) => (
-                                <div className="flex items-center justify-center gap-2">
-                                    <ActionButton color="theme" icon={Edit} onClick={() => abrirEditar(r)} title="Editar rol">Editar</ActionButton>
-                                    <ActionButton color="red" icon={Trash2} onClick={() => solicitarEliminarRol(r.id)} title="Eliminar rol">Eliminar</ActionButton>
-                                </div>
-                            )
-                        }
+                        buildActionColumn({
+                            onEdit: (row) => abrirEditar(row),
+                            onDelete: (row) => solicitarEliminarRol(row.id),
+                            onView: (row) => abrirVer(row),
+                            width: '30%'
+                        })
                     ];
                     return (
                         <TablaBase
@@ -356,11 +374,11 @@ const RolesPage = () => {
 
             <ModalCrudGenerico
                 isOpen={modalAbierto}
-                mode={modoModal === 'crear' ? 'add' : 'edit'}
-                title={modoModal === 'crear' ? 'Nuevo Rol' : 'Editar Rol'}
+                mode={modoModal === 'crear' ? 'add' : (modoModal === 'editar' ? 'edit' : 'view')}
+                title={modoModal === 'crear' ? 'Nuevo Rol' : (modoModal === 'editar' ? 'Editar Rol' : 'Información del Rol')}
                 icon={Shield}
                 initialValues={valoresIniciales}
-                size="md"
+                size="xl"
                 validate={(vals) => {
                     if (!vals.nombre || !vals.nombre.trim()) return 'El nombre es requerido';
                     if (vals.nombre.length < 3) return 'El nombre debe tener al menos 3 caracteres';
@@ -391,6 +409,28 @@ const RolesPage = () => {
                         ]
                     }
                 ]}
+                readOnlyContent={(vals) => (
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-500 mb-1">Nombre</label>
+                            <div className="font-medium" style={{ color: 'var(--text)' }}>{vals.nombre || '-'}</div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-500 mb-1">Descripción</label>
+                            <div style={{ color: 'var(--text)' }}>{vals.descripcion || '-'}</div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-500 mb-1">Permisos</label>
+                            <div className="text-sm" style={{ color: 'var(--muted)' }}>{(vals.permisos || []).length} permiso(s)</div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>
+                            <span className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${String(vals.estado).toLowerCase() === 'activo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                                {String(vals.estado).toLowerCase() === 'activo' ? 'Activo' : 'Inactivo'}
+                            </span>
+                        </div>
+                    </div>
+                )}
                 onSubmit={(vals) => (modoModal === 'crear' ? crearRol(vals) : editarRol(vals))}
                 onClose={cerrarModal}
             />

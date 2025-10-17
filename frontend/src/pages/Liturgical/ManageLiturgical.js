@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Church } from 'lucide-react';
 import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
@@ -10,9 +10,10 @@ import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico';
 import { Plus, Pencil, Trash2, Eye, Search } from 'lucide-react';
 import useLiturgicalActs from '../../hooks/useLiturgicalActs';
 import { ACTO_NOMBRES } from '../../constants/liturgical';
-import { useAuth } from '../../contexts/AuthContext';
 import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
 import { motion } from 'framer-motion';
+import { useAuth } from '../../contexts/AuthContext';
+import { buildActionColumn } from '../../components/Common/ActionColumn';
 
 const ManageLiturgical = () => {
   const { items, loading, error, list, createItem, updateItem, removeItem } = useLiturgicalActs({ autoList: true });
@@ -20,20 +21,19 @@ const ManageLiturgical = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit' | 'view'
   const [current, setCurrent] = useState(null);
-  const [parroquias, setParroquias] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [parroquiaOptions, setParroquiaOptions] = useState([]);
 
-  useEffect(() => {
-    // Cargar parroquias para el combobox
+  React.useEffect(() => {
     (async () => {
       try {
         const resp = await authFetch('http://localhost:5000/api/parroquias');
-        if (resp.ok) {
+        if (resp?.ok) {
           const data = await resp.json();
           const opts = (data.parroquias || []).map(p => ({ value: p.parroquiaid, label: p.par_nombre }));
-          setParroquias(opts);
+          setParroquiaOptions(opts);
         }
       } catch {}
     })();
@@ -73,26 +73,23 @@ const ManageLiturgical = () => {
         </span>
       )
     },
-    {
-      key: 'acciones', header: 'Acciones', width: '40%', align: 'center', render: (row) => (
-        <div className="flex items-center justify-center gap-2">
-          <ActionButton color="theme" icon={Pencil} onClick={() => { setCurrent(row); setModalMode('edit'); setModalOpen(true); }}>Editar</ActionButton>
-          <ActionButton color="red" icon={Trash2} onClick={() => handleDelete(row)}>Eliminar</ActionButton>
-          <ActionButton color="blue" icon={Eye} onClick={() => { setCurrent(row); setModalMode('view'); setModalOpen(true); }}>Ver más</ActionButton>
-        </div>
-      )
-    }
+    buildActionColumn({
+      onEdit: (row) => { setCurrent(row); setModalMode('edit'); setModalOpen(true); },
+      onDelete: (row) => handleDelete(row),
+      onView: (row) => { setCurrent(row); setModalMode('view'); setModalOpen(true); },
+      width: '40%'
+    })
   ]), []);
 
   const fields = useMemo(() => ([
-    { name: 'parroquiaid', label: 'Parroquia', type: 'select', options: [{ value: '', label: 'Seleccione' }, ...parroquias] },
+    { name: 'parroquiaid', label: 'Parroquia', type: 'select', options: [{ value: '', label: 'Seleccione' }, ...parroquiaOptions], disabled: false },
     { name: 'act_nombre', label: 'Acto', type: 'select', options: [{ value: '', label: 'Seleccione' }, ...ACTO_NOMBRES] },
     { name: 'act_titulo', label: 'Título', type: 'text', placeholder: 'Ej. Misa dominical' },
     { name: 'act_fecha', label: 'Fecha', type: 'date', placeholder: 'YYYY-MM-DD' },
     { name: 'act_hora', label: 'Hora', type: 'time', placeholder: 'HH:MM' },
     { name: 'act_descripcion', label: 'Descripción', type: 'textarea', placeholder: 'Observaciones' },
     { name: 'act_estado', label: 'Activo', type: 'checkbox' },
-  ]), [parroquias]);
+  ]), [parroquiaOptions]);
 
   const validate = (v) => {
     if (!v.parroquiaid) return 'Seleccione la parroquia';
@@ -193,12 +190,16 @@ const ManageLiturgical = () => {
         mode={modalMode}
         title={modalMode === 'add' ? 'Nuevo Acto Litúrgico' : modalMode === 'edit' ? 'Editar Acto Litúrgico' : 'Detalle del Acto'}
         icon={Church}
-        initialValues={current || {}}
+        initialValues={current || { act_estado: true }}
         fields={fields}
         validate={validate}
-        onSubmit={handleSubmit}
+        onSubmit={(vals) => {
+          const payload = { ...vals };
+          if (payload.parroquiaid !== '' && payload.parroquiaid !== undefined) payload.parroquiaid = Number(payload.parroquiaid);
+          return handleSubmit(payload);
+        }}
         onClose={() => setModalOpen(false)}
-        size="lg"
+        size="xl"
       />
 
       <DialogoConfirmacion

@@ -8,6 +8,7 @@ import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico';
 import useLiturgicalSchedules from '../../hooks/useLiturgicalSchedules';
 import { LITURGICAL_TYPES } from '../../constants/liturgical';
 import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
+import { buildActionColumn } from '../../components/Common/ActionColumn';
 
 const Schedules = () => {
   const { items, loading, error, createItem, updateItem, removeItem } = useLiturgicalSchedules({ autoList: true });
@@ -23,12 +24,13 @@ const Schedules = () => {
     { key: 'weekday', header: 'Día', width: '15%', render: (r) => ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][r.weekday || 0] },
     { key: 'time', header: 'Hora', width: '15%', align: 'center' },
     { key: 'location', header: 'Lugar', width: '30%' },
-    { key: 'actions', header: 'Acciones', width: '20%', align: 'right', render: (row) => (
-      <div className="flex justify-end gap-2">
-        <ActionButton color="blue" icon={Pencil} onClick={() => { setCurrent(row); setMode('edit'); setModalOpen(true); }}>Editar</ActionButton>
-        <ActionButton color="red" icon={Trash2} onClick={() => handleDelete(row)}>Eliminar</ActionButton>
-      </div>
-    )}
+    buildActionColumn({
+      onEdit: (row) => { setCurrent(row); setMode('edit'); setModalOpen(true); },
+      onDelete: (row) => handleDelete(row),
+      onView: undefined,
+      width: '20%',
+      align: 'right'
+    })
   ]), []);
 
   const fields = useMemo(() => ([
