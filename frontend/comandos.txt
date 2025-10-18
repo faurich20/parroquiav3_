@@ -5,4 +5,5 @@ python -m venv venv
 venv\Scripts\activate
 
 npm install
+npm install react-big-calendar date-fns
 npm start

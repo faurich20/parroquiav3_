@@ -8,22 +8,37 @@ import ActionButton from '../../components/Common/ActionButton';
 import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
 import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico';
 import useCrud from '../../hooks/useCrud';
-import TablaBase from '../../components/Common/TablaBase';
+import TablaConPaginacion from '../../components/Common/TablaConPaginacion';
 import SelectorRol from '../../components/Form/SelectorRol';
 import { useAuth } from '../../contexts/AuthContext';
 import { buildActionColumn } from '../../components/Common/ActionColumn';
 
 const UsersPage = () => {
     const [searchTerm, setSearchTerm] = useState('');
-    const [currentPage, setCurrentPage] = useState(1);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState("add");
     const [selectedUser, setSelectedUser] = useState(null);
     const { items: users, setItems, loading, error, createItem, updateItem, removeItem, updateStatus } = useCrud('http://localhost:5000/api/users');
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState(null);
-    const itemsPerPage = 7;
     const { authFetch } = useAuth();
+
+    // Datos de prueba para desarrollo (remover en producción)
+    const testUsers = [
+      { id: 1, name: 'Usuario 1', email: 'user1@test.com', role: 'user', status: 'Activo' },
+      { id: 2, name: 'Usuario 2', email: 'user2@test.com', role: 'admin', status: 'Activo' },
+      { id: 3, name: 'Usuario 3', email: 'user3@test.com', role: 'user', status: 'Inactivo' },
+      { id: 4, name: 'Usuario 4', email: 'user4@test.com', role: 'secretaria', status: 'Activo' },
+      { id: 5, name: 'Usuario 5', email: 'user5@test.com', role: 'user', status: 'Activo' },
+      { id: 6, name: 'Usuario 6', email: 'user6@test.com', role: 'admin', status: 'Activo' },
+      { id: 7, name: 'Usuario 7', email: 'user7@test.com', role: 'user', status: 'Inactivo' },
+      { id: 8, name: 'Usuario 8', email: 'user8@test.com', role: 'user', status: 'Activo' },
+      { id: 9, name: 'Usuario 9', email: 'user9@test.com', role: 'admin', status: 'Activo' },
+      { id: 10, name: 'Usuario 10', email: 'user10@test.com', role: 'user', status: 'Activo' },
+    ];
+
+    // Usar datos reales si están disponibles, sino usar datos de prueba
+    const displayUsers = users.length > 0 ? users : testUsers;
     const [rolesList, setRolesList] = useState([]);
     const [parroquias, setParroquias] = useState([]);
     const [showPassword, setShowPassword] = useState(false);
@@ -130,16 +145,7 @@ const UsersPage = () => {
         }
     };
 
-    const filteredUsers = users.filter(user =>
-        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const currentUsers = filteredUsers.slice(startIndex, startIndex + itemsPerPage);
-
-    if (loading) {
+    if (loading && users.length === 0) {
         return (
             <div className="flex items-center justify-center min-h-screen">
                 <div className="text-center">
@@ -251,54 +257,19 @@ const UsersPage = () => {
                         })
                     ];
                     return (
-                        <TablaBase
+                        <TablaConPaginacion
                             columns={columns}
-                            data={currentUsers}
+                            data={displayUsers}
                             rowKey={(u) => u.id}
+                            searchTerm={searchTerm}
+                            searchKeys={['name', 'email']}
+                            itemsPerPage={7}
                             hover
                             striped
                             emptyText="No hay usuarios"
                         />
                     );
                 })()}
-
-                {/* Paginación */}
-                <div className="flex items-center justify-between mt-6">
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                            disabled={currentPage === 1}
-                            className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
-                            style={{ borderColor: 'var(--border)' }}
-                        >
-                            Anterior
-                        </button>
-
-                        {Array.from({ length: totalPages || 1 }).map((_, i) => (
-                            <button
-                                key={i}
-                                onClick={() => setCurrentPage(i + 1)}
-                                className={`px-3 py-1 rounded-lg border text-sm transition-colors`}
-                                style={
-                                    currentPage === i + 1
-                                        ? { background: 'var(--primary)', color: '#ffffff', borderColor: 'var(--primary)' }
-                                        : { borderColor: 'var(--border)' }
-                                }
-                            >
-                                {i + 1}
-                            </button>
-                        ))}
-
-                        <button
-                            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages || 1))}
-                            disabled={currentPage === (totalPages || 1)}
-                            className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
-                            style={{ borderColor: 'var(--border)' }}
-                        >
-                            Siguiente
-                        </button>
-                    </div>
-                </div>
             </Card>
 
             {/* Modal unificado */}

@@ -146,6 +146,9 @@ class Parroquia(db.Model):
     par_telefono2 = db.Column(db.String)
 
     distrito = db.relationship('Distrito')
+    personas = db.relationship('Persona', back_populates='parroquia')
+    actos_liturgicos = db.relationship('ActoLiturgico', back_populates='parroquia')
+    horarios = db.relationship('Horario', back_populates='parroquia')
 
     def to_dict(self):
         dis = self.distrito
@@ -178,7 +181,8 @@ class Persona(db.Model):
     parroquiaid = db.Column(db.Integer, db.ForeignKey('parroquia.parroquiaid'), nullable=False)
 
     user = db.relationship('User', backref=db.backref('persona_rel', uselist=False))
-    parroquia = db.relationship('Parroquia')
+    parroquia = db.relationship('Parroquia', back_populates='personas')
+    reservas = db.relationship('Reserva', back_populates='persona')
 
     def to_dict(self):
         return {
@@ -201,37 +205,90 @@ class ActoLiturgico(db.Model):
 
     actoliturgicoid = db.Column(db.Integer, primary_key=True)
     parroquiaid = db.Column(db.Integer, db.ForeignKey('parroquia.parroquiaid'))
-    act_nombre = db.Column(db.String(100), nullable=False)
-    act_titulo = db.Column(db.String(200), nullable=False)
-    act_fecha = db.Column(db.Date, nullable=False)
-    act_hora = db.Column(db.Time, nullable=False)
+    act_nombre = db.Column(db.String(100), nullable=False)  # misa, bautismo, matrimonio, confirmacion, comunion, exequias
+    act_titulo = db.Column(db.String(200), nullable=False)  # ej. Misa Dominical, Misa Señor de los Milagros
     act_descripcion = db.Column(db.Text)
     act_estado = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    parroquia = db.relationship('Parroquia')
+    parroquia = db.relationship('Parroquia', back_populates='actos_liturgicos')
+    horarios = db.relationship('Horario', back_populates='acto_liturgico', cascade='all, delete-orphan')
 
     def to_dict(self):
-        # Estado dinámico: inactivo si han pasado 2h desde act_hora en act_fecha
-        estado = bool(self.act_estado)
-        try:
-            if self.act_fecha and self.act_hora:
-                dt = datetime.combine(self.act_fecha, self.act_hora)
-                if datetime.utcnow() > dt + timedelta(hours=2):
-                    estado = False
-        except Exception:
-            pass
-
         return {
-            'id': self.actoliturgicoid,  # compat con useCrud/TablaBase si se usa
             'actoliturgicoid': self.actoliturgicoid,
             'parroquiaid': self.parroquiaid,
             'parroquia_nombre': self.parroquia.par_nombre if self.parroquia else None,
             'act_nombre': self.act_nombre,
             'act_titulo': self.act_titulo,
-            'act_fecha': self.act_fecha.isoformat() if self.act_fecha else None,
-            'act_hora': self.act_hora.strftime('%H:%M') if self.act_hora else None,
             'act_descripcion': self.act_descripcion,
-            'act_estado': estado,
+            'act_estado': self.act_estado,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class Horario(db.Model):
+    __tablename__ = 'horario'
+
+    horarioid = db.Column(db.Integer, primary_key=True)
+    actoliturgicoid = db.Column(db.Integer, db.ForeignKey('actoliturgico.actoliturgicoid'), nullable=False)
+    h_fecha = db.Column(db.Date, nullable=False)  # fecha específica del horario
+    h_hora = db.Column(db.Time, nullable=False)   # hora específica del horario
+    parroquiaid = db.Column(db.Integer, db.ForeignKey('parroquia.parroquiaid'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    acto_liturgico = db.relationship('ActoLiturgico', back_populates='horarios')
+    parroquia = db.relationship('Parroquia', back_populates='horarios')
+    reservas = db.relationship('Reserva', back_populates='horario', cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'horarioid': self.horarioid,
+            'actoliturgicoid': self.actoliturgicoid,
+            'acto_nombre': self.acto_liturgico.act_nombre if self.acto_liturgico else None,
+            'acto_titulo': self.acto_liturgico.act_titulo if self.acto_liturgico else None,
+            'h_fecha': self.h_fecha.isoformat() if self.h_fecha else None,
+            'h_hora': self.h_hora.strftime('%H:%M') if self.h_hora else None,
+            'parroquiaid': self.parroquiaid,
+            'parroquia_nombre': self.parroquia.par_nombre if self.parroquia else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class Reserva(db.Model):
+    __tablename__ = 'reserva'
+
+    reservaid = db.Column(db.Integer, primary_key=True)
+    horarioid = db.Column(db.Integer, db.ForeignKey('horario.horarioid'), nullable=False)
+    personaid = db.Column(db.Integer, db.ForeignKey('persona.personaid'))
+    res_descripcion = db.Column(db.Text, nullable=False)
+    res_estado = db.Column(db.Boolean, default=False)  # true: Cancelado, false: Sin pagar
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    horario = db.relationship('Horario', back_populates='reservas')
+    persona = db.relationship('Persona', back_populates='reservas')
+
+    def to_dict(self):
+        return {
+            'reservaid': self.reservaid,
+            'horarioid': self.horarioid,
+            'personaid': self.personaid,
+            'persona_nombre': f"{self.persona.per_nombres} {self.persona.per_apellidos}" if self.persona else None,
+            'res_descripcion': self.res_descripcion,
+            'res_estado': self.res_estado,  # true = Cancelado, false = Sin pagar
+            'estado_texto': 'Cancelado' if self.res_estado else 'Sin pagar',
+            'h_fecha': self.horario.h_fecha.isoformat() if self.horario and self.horario.h_fecha else None,
+            'h_hora': self.horario.h_hora.strftime('%H:%M') if self.horario and self.horario.h_hora else None,
+            'acto_nombre': self.horario.acto_liturgico.act_nombre if self.horario and self.horario.acto_liturgico else None,
+            'acto_titulo': self.horario.acto_liturgico.act_titulo if self.horario and self.horario.acto_liturgico else None,
+            'parroquia_nombre': self.horario.parroquia.par_nombre if self.horario and self.horario.parroquia else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 class LiturgicalAct(db.Model):
     __tablename__ = 'liturgical_act'

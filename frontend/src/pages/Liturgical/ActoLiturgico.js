@@ -4,7 +4,7 @@ import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 
 import { useMemo, useState } from 'react';
-import TablaBase from '../../components/Common/TablaBase';
+import TablaConPaginacion from '../../components/Common/TablaConPaginacion';
 import ActionButton from '../../components/Common/ActionButton';
 import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico';
 import { Plus, Pencil, Trash2, Eye, Search } from 'lucide-react';
@@ -14,10 +14,12 @@ import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
 import { motion } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
 import { buildActionColumn } from '../../components/Common/ActionColumn';
+import { useLocation } from 'react-router-dom';
 
 const ActoLiturgico = () => {
   const { items, loading, error, list, createItem, updateItem, removeItem } = useLiturgicalActs({ autoList: true });
   const { authFetch } = useAuth();
+  const location = useLocation();
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit' | 'view'
   const [current, setCurrent] = useState(null);
@@ -25,6 +27,23 @@ const ActoLiturgico = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [parroquiaOptions, setParroquiaOptions] = useState([]);
+
+  // Datos de prueba para desarrollo (remover en producción)
+  const testActos = [
+    { id: 1, actoliturgicoid: 1, parroquia_nombre: 'Parroquia 1', act_nombre: 'misa', act_titulo: 'Misa Dominical', act_fecha: '2024-01-01', act_hora: '10:00', act_descripcion: 'Misa principal', act_estado: true },
+    { id: 2, actoliturgicoid: 2, parroquia_nombre: 'Parroquia 2', act_nombre: 'bautismo', act_titulo: 'Bautismo Familiar', act_fecha: '2024-01-02', act_hora: '15:00', act_descripcion: 'Ceremonia de bautismo', act_estado: true },
+    { id: 3, actoliturgicoid: 3, parroquia_nombre: 'Parroquia 1', act_nombre: 'matrimonio', act_titulo: 'Boda Especial', act_fecha: '2024-01-03', act_hora: '16:00', act_descripcion: 'Ceremonia matrimonial', act_estado: true },
+    { id: 4, actoliturgicoid: 4, parroquia_nombre: 'Parroquia 3', act_nombre: 'confirmacion', act_titulo: 'Confirmación Juvenil', act_fecha: '2024-01-04', act_hora: '11:00', act_descripcion: 'Sacramento de confirmación', act_estado: true },
+    { id: 5, actoliturgicoid: 5, parroquia_nombre: 'Parroquia 2', act_nombre: 'comunion', act_titulo: 'Primera Comunión', act_fecha: '2024-01-05', act_hora: '09:00', act_descripcion: 'Primera eucaristía', act_estado: true },
+    { id: 6, actoliturgicoid: 6, parroquia_nombre: 'Parroquia 1', act_nombre: 'exequias', act_titulo: 'Funeral', act_fecha: '2024-01-06', act_hora: '14:00', act_descripcion: 'Ceremonia de exequias', act_estado: true },
+    { id: 7, actoliturgicoid: 7, parroquia_nombre: 'Parroquia 3', act_nombre: 'misa', act_titulo: 'Misa Vespertina', act_fecha: '2024-01-07', act_hora: '18:00', act_descripcion: 'Misa de la tarde', act_estado: true },
+    { id: 8, actoliturgicoid: 8, parroquia_nombre: 'Parroquia 2', act_nombre: 'bautismo', act_titulo: 'Bautismo Comunitario', act_fecha: '2024-01-08', act_hora: '10:30', act_descripcion: 'Bautismos múltiples', act_estado: true },
+    { id: 9, actoliturgicoid: 9, parroquia_nombre: 'Parroquia 1', act_nombre: 'matrimonio', act_titulo: 'Boda Tradicional', act_fecha: '2024-01-09', act_hora: '17:00', act_descripcion: 'Ceremonia tradicional', act_estado: true },
+    { id: 10, actoliturgicoid: 10, parroquia_nombre: 'Parroquia 3', act_nombre: 'confirmacion', act_titulo: 'Confirmación Parroquial', act_fecha: '2024-01-10', act_hora: '15:30', act_descripcion: 'Grupo de jóvenes', act_estado: true },
+  ];
+
+  // Usar datos reales si están disponibles, sino usar datos de prueba
+  const displayItems = items.length > 0 ? items : testActos;
 
   React.useEffect(() => {
     (async () => {
@@ -39,37 +58,54 @@ const ActoLiturgico = () => {
     })();
   }, [authFetch]);
 
+  // Detectar navegación desde el calendario y abrir automáticamente el modal
+  React.useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('from') === 'calendar') {
+      setCurrent({ act_estado: true });
+      setModalMode('add');
+      setModalOpen(true);
+
+      // Limpiar el parámetro de la URL para evitar que se vuelva a abrir el modal al refrescar
+      const newUrl = new URL(window.location);
+      newUrl.searchParams.delete('from');
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [location.search]);
+
   const labelByActo = useMemo(() => Object.fromEntries((ACTO_NOMBRES || []).map(a => [a.value, a.label])), []);
   const capitalize = (s) => (typeof s === 'string' && s.length > 0) ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
   const columns = useMemo(() => ([
     {
-      key: 'acto', header: 'Acto', width: '24%', render: (r) => (
+      key: 'acto', header: 'Acto', width: '30%', render: (r) => (
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg, var(--primary), var(--secondary))' }}>
             <span className="text-white text-sm font-bold">{(labelByActo[r.act_nombre] || 'A').charAt(0)}</span>
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-medium truncate" style={{ color: 'var(--text)' }}>{capitalize(r.act_titulo)}</p>
+            <p className="font-medium truncate" style={{ color: 'var(--text)' }}>{r.act_titulo}</p>
             <p className="text-sm truncate" style={{ color: 'var(--muted)' }}>{r.parroquia_nombre || ''}</p>
           </div>
         </div>
       )
     },
     {
-      key: 'tipo', header: 'Tipo', width: '10%', align: 'center', render: (r) => (
-        <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">{labelByActo[r.act_nombre] || capitalize(r.act_nombre)}</span>
+      key: 'tipo', header: 'Tipo', width: '15%', align: 'center', render: (r) => (
+        <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">{labelByActo[r.act_nombre] || r.act_nombre}</span>
       )
     },
     {
-      key: 'fecha', header: 'Fecha/Hora', width: '16%', align: 'center', render: (r) => (
-        <span>{r.act_fecha} {r.act_hora ? `/ ${r.act_hora}` : ''}</span>
-      )
-    },
-    {
-      key: 'estado', header: 'Estado', width: '10%', align: 'center', render: (r) => (
+      key: 'estado', header: 'Estado', width: '15%', align: 'center', render: (r) => (
         <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${r.act_estado ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
           {r.act_estado ? 'Activo' : 'Inactivo'}
+        </span>
+      )
+    },
+    {
+      key: 'descripcion', header: 'Descripción', width: '25%', render: (r) => (
+        <span className="text-sm truncate" style={{ color: 'var(--text)' }}>
+          {r.act_descripcion || 'Sin descripción'}
         </span>
       )
     },
@@ -77,7 +113,7 @@ const ActoLiturgico = () => {
       onEdit: (row) => { setCurrent(row); setModalMode('edit'); setModalOpen(true); },
       onDelete: (row) => handleDelete(row),
       onView: (row) => { setCurrent(row); setModalMode('view'); setModalOpen(true); },
-      width: '40%'
+      width: '15%'
     })
   ]), []);
 
@@ -85,8 +121,6 @@ const ActoLiturgico = () => {
     { name: 'parroquiaid', label: 'Parroquia', type: 'select', options: [{ value: '', label: 'Seleccione' }, ...parroquiaOptions], disabled: false },
     { name: 'act_nombre', label: 'Acto', type: 'select', options: [{ value: '', label: 'Seleccione' }, ...ACTO_NOMBRES] },
     { name: 'act_titulo', label: 'Título', type: 'text', placeholder: 'Ej. Misa dominical' },
-    { name: 'act_fecha', label: 'Fecha', type: 'date', placeholder: 'YYYY-MM-DD' },
-    { name: 'act_hora', label: 'Hora', type: 'time', placeholder: 'HH:MM' },
     { name: 'act_descripcion', label: 'Descripción', type: 'textarea', placeholder: 'Observaciones' },
     { name: 'act_estado', label: 'Activo', type: 'checkbox' },
   ]), [parroquiaOptions]);
@@ -94,9 +128,7 @@ const ActoLiturgico = () => {
   const validate = (v) => {
     if (!v.parroquiaid) return 'Seleccione la parroquia';
     if (!v.act_nombre) return 'Seleccione el acto';
-    if (!v.act_titulo) return 'Ingrese el título';
-    if (!v.act_fecha) return 'Ingrese la fecha';
-    if (!v.act_hora) return 'Ingrese la hora';
+    if (!v.act_titulo?.trim()) return 'Ingrese el título';
     return '';
   };
 
@@ -145,7 +177,7 @@ const ActoLiturgico = () => {
       <Card>
         <div className="flex items-center justify-between px-4 pt-4">
           <div className="text-sm text-gray-500">
-            {loading ? 'Cargando...' : error ? `Error: ${error}` : `${items.length} registro(s)`}
+            {loading && items.length === 0 ? 'Cargando...' : error ? `Error: ${error}` : `${items.length} registro(s)`}
           </div>
           <div />
         </div>
@@ -173,12 +205,16 @@ const ActoLiturgico = () => {
               String(r.act_titulo || '').toLowerCase().includes(term)
             );
             return (
-              <TablaBase
+              <TablaConPaginacion
                 columns={columns}
-                data={filtered}
+                data={displayItems}
                 rowKey={(r) => r.id || r.actoliturgicoid}
+                searchTerm={searchTerm}
+                searchKeys={['parroquia_nombre', 'act_nombre', 'act_titulo']}
+                itemsPerPage={7}
                 striped
                 headerSticky
+                emptyText="No hay actos litúrgicos"
               />
             );
           })()}

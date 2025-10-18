@@ -4,7 +4,7 @@ import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 import ActionButton from '../../components/Common/ActionButton';
 import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
-import TablaBase from '../../components/Common/TablaBase';
+import TablaConPaginacion from '../../components/Common/TablaConPaginacion';
 import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico';
 import useCrud from '../../hooks/useCrud';
 import { buildActionColumn } from '../../components/Common/ActionColumn';
@@ -19,6 +19,23 @@ const ParroquiasPage = () => {
   const [current, setCurrent] = useState(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  // Datos de prueba para desarrollo (remover en producción)
+  const testParroquias = [
+    { parroquiaid: 1, par_nombre: 'Parroquia 1', par_direccion: 'Dirección 1', dep_nombre: 'LAMBAYEQUE', prov_nombre: 'LAMBAYEQUE', dis_nombre: 'LAMBAYEQUE', par_telefono1: '123456789' },
+    { parroquiaid: 2, par_nombre: 'Parroquia 2', par_direccion: 'Dirección 2', dep_nombre: 'LAMBAYEQUE', prov_nombre: 'LAMBAYEQUE', dis_nombre: 'CHICLAYO', par_telefono1: '987654321' },
+    { parroquiaid: 3, par_nombre: 'Parroquia 3', par_direccion: 'Dirección 3', dep_nombre: 'LAMBAYEQUE', prov_nombre: 'LAMBAYEQUE', dis_nombre: 'JOSE LEONARDO ORTIZ', par_telefono1: '456789123' },
+    { parroquiaid: 4, par_nombre: 'Parroquia 4', par_direccion: 'Dirección 4', dep_nombre: 'LAMBAYEQUE', prov_nombre: 'LAMBAYEQUE', dis_nombre: 'LAMBAYEQUE', par_telefono1: '321654987' },
+    { parroquiaid: 5, par_nombre: 'Parroquia 5', par_direccion: 'Dirección 5', dep_nombre: 'LAMBAYEQUE', prov_nombre: 'LAMBAYEQUE', dis_nombre: 'CHICLAYO', par_telefono1: '654987321' },
+    { parroquiaid: 6, par_nombre: 'Parroquia 6', par_direccion: 'Dirección 6', dep_nombre: 'LAMBAYEQUE', prov_nombre: 'LAMBAYEQUE', dis_nombre: 'JOSE LEONARDO ORTIZ', par_telefono1: '789123456' },
+    { parroquiaid: 7, par_nombre: 'Parroquia 7', par_direccion: 'Dirección 7', dep_nombre: 'LAMBAYEQUE', prov_nombre: 'LAMBAYEQUE', dis_nombre: 'LAMBAYEQUE', par_telefono1: '147258369' },
+    { parroquiaid: 8, par_nombre: 'Parroquia 8', par_direccion: 'Dirección 8', dep_nombre: 'LAMBAYEQUE', prov_nombre: 'LAMBAYEQUE', dis_nombre: 'CHICLAYO', par_telefono1: '963852741' },
+    { parroquiaid: 9, par_nombre: 'Parroquia 9', par_direccion: 'Dirección 9', dep_nombre: 'LAMBAYEQUE', prov_nombre: 'LAMBAYEQUE', dis_nombre: 'JOSE LEONARDO ORTIZ', par_telefono1: '852741963' },
+    { parroquiaid: 10, par_nombre: 'Parroquia 10', par_direccion: 'Dirección 10', dep_nombre: 'LAMBAYEQUE', prov_nombre: 'LAMBAYEQUE', dis_nombre: 'LAMBAYEQUE', par_telefono1: '741963852' },
+  ];
+
+  // Usar datos reales si están disponibles, sino usar datos de prueba
+  const displayItems = items.length > 0 ? items : testParroquias;
 
   // Opciones de selects en cascada
   const [departamentos, setDepartamentos] = useState([]);
@@ -240,7 +257,7 @@ const ParroquiasPage = () => {
     if (!resp.success) alert(resp.error || 'Error al eliminar');
   };
 
-  if (loading) {
+  if (loading && items.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -302,7 +319,17 @@ const ParroquiasPage = () => {
         </div>
 
         <div className="p-4">
-          <TablaBase columns={columns} data={filtered} rowKey={(r) => r.parroquiaid} striped headerSticky />
+          <TablaConPaginacion
+            columns={columns}
+            data={displayItems}
+            rowKey={(r) => r.parroquiaid}
+            searchTerm={searchTerm}
+            searchKeys={['par_nombre', 'par_direccion', 'par_telefono1', 'dep_nombre', 'prov_nombre', 'dis_nombre']}
+            itemsPerPage={7}
+            hover
+            striped
+            emptyText="No hay parroquias"
+          />
         </div>
       </Card>
 

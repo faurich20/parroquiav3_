@@ -23,8 +23,8 @@ import ParroquiasPage from './pages/Security/Parroquias';
 
 // Liturgical Pages
 import ActoLiturgico from './pages/Liturgical/ActoLiturgico';
-import Schedules from './pages/Liturgical/Schedules';
-import Reservations from './pages/Liturgical/Reservations';
+import Horarios from './pages/Liturgical/Horarios';
+import Reservacion from './pages/Liturgical/Reservacion';
 import LiturgicalReports from './pages/Liturgical/LiturgicalReports';
 
 // Reports Pages
@@ -74,8 +74,8 @@ const App = () => {
             <Route path="/seguridad/permisos" element={<PermissionsPage />} />
             <Route path="/seguridad/parroquias" element={<ParroquiasPage />} />
             <Route path="/liturgico/gestionar" element={<ActoLiturgico />} />
-            <Route path="/liturgico/horarios" element={<Schedules />} />
-            <Route path="/liturgico/reservas" element={<Reservations />} />
+            <Route path="/liturgico/horarios" element={<Horarios />} />
+            <Route path="/liturgico/reservas" element={<Reservacion />} />
             <Route path="/liturgico/reportes" element={<LiturgicalReports />} />
             <Route path="/reportes/gerenciales" element={<ManagementReports />} />
             <Route path="/reportes/transaccionales" element={<TransactionReports />} />

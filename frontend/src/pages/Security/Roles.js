@@ -6,7 +6,7 @@ import Card from '../../components/Common/Card';
 import { useAuth } from '../../contexts/AuthContext';
 import useCrud from '../../hooks/useCrud';
 import ActionButton from '../../components/Common/ActionButton';
-import TablaBase from '../../components/Common/TablaBase';
+import TablaConPaginacion from '../../components/Common/TablaConPaginacion';
 import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico.js';
 import ListaPermisos from '../../components/Form/ListaPermisos.js';
 import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
@@ -18,8 +18,6 @@ const RolesPage = () => {
     const { items: roles, setItems, loading: cargando, error, createItem, updateItem, removeItem, updateStatus, list } = useCrud('http://localhost:5000/api/roles', { autoList: false });
     const [errorLocal, setErrorLocal] = useState('');
     const [busqueda, setBusqueda] = useState('');
-    const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 7;
 
     const [modalAbierto, setModalAbierto] = useState(false);
     const [modoModal, setModoModal] = useState('crear'); // 'crear' | 'editar'
@@ -118,10 +116,6 @@ const RolesPage = () => {
             (r.description || '').toLowerCase().includes(q)
         );
     }, [roles, busqueda]);
-
-    const totalPages = Math.ceil(rolesFiltrados.length / itemsPerPage) || 1;
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const currentRoles = rolesFiltrados.slice(startIndex, startIndex + itemsPerPage);
 
     const abrirCrear = () => {
         setModoModal('crear');
@@ -304,72 +298,19 @@ const RolesPage = () => {
                         })
                     ];
                     return (
-                        <TablaBase
+                        <TablaConPaginacion
                             columns={columns}
-                            data={currentRoles}
+                            data={roles}
                             rowKey={(r) => r.id}
+                            searchTerm={busqueda}
+                            searchKeys={['name', 'description']}
+                            itemsPerPage={7}
                             hover
                             striped
                             emptyText="Sin roles"
                         />
                     );
                 })()}
-                {/* Paginación */}
-                <div className="flex items-center justify-between mt-4">
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm" style={{ color: 'var(--muted)' }}>Página</span>
-                        <input
-                            type="number"
-                            min={1}
-                            max={totalPages}
-                            value={currentPage}
-                            onChange={(e) => {
-                                const n = parseInt(e.target.value || '1', 10);
-                                if (Number.isNaN(n)) return;
-                                const clamped = Math.max(1, Math.min(n, totalPages));
-                                setCurrentPage(clamped);
-                            }}
-                            className="w-14 px-2 py-1 rounded-lg text-center text-sm"
-                            style={{ background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border)' }}
-                        />
-                        <span className="text-sm" style={{ color: 'var(--muted)' }}>de {totalPages}</span>
-                    </div>
-
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                            disabled={currentPage === 1}
-                            className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
-                            style={{ borderColor: 'var(--border)' }}
-                        >
-                            Anterior
-                        </button>
-
-                        {Array.from({ length: totalPages }).map((_, i) => (
-                            <button
-                                key={i}
-                                onClick={() => setCurrentPage(i + 1)}
-                                className={`px-3 py-1 rounded-lg border text-sm transition-colors`}
-                                style={
-                                    currentPage === i + 1
-                                        ? { background: 'var(--primary)', color: '#ffffff', borderColor: 'var(--primary)' }
-                                        : { borderColor: 'var(--border)' }
-                                }
-                            >
-                                {i + 1}
-                            </button>
-                        ))}
-
-                        <button
-                            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                            disabled={currentPage === totalPages}
-                            className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
-                            style={{ borderColor: 'var(--border)' }}
-                        >
-                            Siguiente
-                        </button>
-                    </div>
-                </div>
             </Card>
 
             <ModalCrudGenerico

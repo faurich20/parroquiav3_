@@ -165,55 +165,46 @@ CREATE TABLE IF NOT EXISTS public.persona (
 CREATE TABLE IF NOT EXISTS public.actoliturgico (
   actoliturgicoid  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   parroquiaid      INTEGER REFERENCES public.parroquia(parroquiaid) ON DELETE SET NULL,
-  act_nombre       VARCHAR(100) NOT NULL, -- misa, bautismo, etc
-  act_titulo       VARCHAR(200) NOT NULL,
-  act_fecha        DATE NOT NULL,
-  act_hora         TIME NOT NULL,
+  act_nombre       VARCHAR(100) NOT NULL, -- misa, bautismo, matrimonio, confirmacion, comunion, exequias
+  act_titulo       VARCHAR(200) NOT NULL, -- ej. Misa Dominical, Misa Señor de los Milagros
   act_descripcion  TEXT,
-  act_estado       BOOLEAN NOT NULL DEFAULT TRUE
+  act_estado       BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_actoliturgico_parroquia ON public.actoliturgico(parroquiaid);
-CREATE INDEX IF NOT EXISTS idx_actoliturgico_fecha ON public.actoliturgico(act_fecha);
+CREATE INDEX IF NOT EXISTS idx_actoliturgico_estado ON public.actoliturgico(act_estado);
 
--- Tablas litúrgicas legacy/aux (presentes en modelos del backend)
-CREATE TABLE IF NOT EXISTS public.liturgical_act (
-  id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  type       VARCHAR(50) NOT NULL,
-  title      VARCHAR(200) NOT NULL,
-  date       DATE NOT NULL,
-  time       VARCHAR(10) NOT NULL, -- HH:MM
-  location   VARCHAR(200),
-  notes      TEXT,
-  is_active  BOOLEAN NOT NULL DEFAULT TRUE,
-  parroquiaid INTEGER REFERENCES public.parroquia(parroquiaid) ON DELETE SET NULL
+-- Horarios de actos litúrgicos
+CREATE TABLE IF NOT EXISTS public.horario (
+  horarioid        INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  actoliturgicoid  INTEGER NOT NULL REFERENCES public.actoliturgico(actoliturgicoid) ON DELETE CASCADE,
+  h_fecha          DATE NOT NULL, -- fecha específica del horario
+  h_hora           TIME NOT NULL, -- hora específica del horario
+  parroquiaid      INTEGER NOT NULL REFERENCES public.parroquia(parroquiaid) ON DELETE CASCADE,
+  created_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_liturgical_act_date ON public.liturgical_act(date);
+CREATE INDEX IF NOT EXISTS idx_horario_fecha ON public.horario(h_fecha);
+CREATE INDEX IF NOT EXISTS idx_horario_acto ON public.horario(actoliturgicoid);
+CREATE INDEX IF NOT EXISTS idx_horario_parroquia ON public.horario(parroquiaid);
 
-CREATE TABLE IF NOT EXISTS public.liturgical_schedule (
-  id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  type       VARCHAR(50) NOT NULL,
-  weekday    SMALLINT NOT NULL CHECK (weekday BETWEEN 0 AND 6),
-  time       TIME NOT NULL,
-  location   VARCHAR(200),
-  is_active  BOOLEAN NOT NULL DEFAULT TRUE,
-  parroquiaid INTEGER REFERENCES public.parroquia(parroquiaid) ON DELETE SET NULL
+-- Reservas de actos litúrgicos
+CREATE TABLE IF NOT EXISTS public.reserva (
+  reservaid        INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  horarioid        INTEGER NOT NULL REFERENCES public.horario(horarioid) ON DELETE CASCADE,
+  personaid        INTEGER REFERENCES public.persona(personaid) ON DELETE SET NULL,
+  res_descripcion  TEXT NOT NULL,
+  res_estado       BOOLEAN NOT NULL DEFAULT FALSE, -- true: Cancelado, false: Sin pagar
+  created_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_liturgical_schedule_weekday ON public.liturgical_schedule(weekday);
-
-CREATE TABLE IF NOT EXISTS public.liturgical_reservation (
-  id             INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  act_id         INTEGER REFERENCES public.liturgical_act(id) ON DELETE SET NULL,
-  personaid      INTEGER REFERENCES public.persona(personaid) ON DELETE SET NULL,
-  reserved_date  DATE NOT NULL,
-  reserved_time  VARCHAR(10), -- HH:MM
-  status         VARCHAR(20) NOT NULL DEFAULT 'pendiente',
-  notes          TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_liturgical_reservation_date ON public.liturgical_reservation(reserved_date);
+CREATE INDEX IF NOT EXISTS idx_reserva_horario ON public.reserva(horarioid);
+CREATE INDEX IF NOT EXISTS idx_reserva_persona ON public.reserva(personaid);
+CREATE INDEX IF NOT EXISTS idx_reserva_estado ON public.reserva(res_estado);
 
 -- =========================================================
 -- 4) Triggers de actualización de updated_at (opcional)
@@ -246,17 +237,37 @@ BEGIN
     FOR EACH ROW
     EXECUTE FUNCTION set_updated_at();
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_actoliturgico_set_updated_at'
+  ) THEN
+    CREATE TRIGGER trg_actoliturgico_set_updated_at
+    BEFORE UPDATE ON public.actoliturgico
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_horario_set_updated_at'
+  ) THEN
+    CREATE TRIGGER trg_horario_set_updated_at
+    BEFORE UPDATE ON public.horario
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_reserva_set_updated_at'
+  ) THEN
+    CREATE TRIGGER trg_reserva_set_updated_at
+    BEFORE UPDATE ON public.reserva
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
+  END IF;
 END$$;
 
+-- 
 -- =========================================================
--- 5) Semillas mínimas (opcional)
--- =========================================================
--- INSERT INTO public.roles(name, description, permissions) VALUES
--- ('admin', 'Administrador', '[]'::jsonb) ON CONFLICT DO NOTHING;
--- INSERT INTO public.roles(name, description, permissions) VALUES
--- ('user', 'Usuario', '[]'::jsonb) ON CONFLICT DO NOTHING;
-
--- =========================================================
--- 6) Permisos (opcional si usas parroquia_user)
+-- 7) Permisos (opcional si usas parroquia_user)
 -- =========================================================
 -- ALTER TABLE public.* OWNER TO parroquia_user;  -- Ajusta propietario si deseas

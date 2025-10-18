@@ -1,5 +1,5 @@
 -- Seed Inserts for core tables
--- Tables: roles, users, departamento, provincia, distrito, parroquia, persona, actoliturgico
+-- Tables: roles, users, departamento, provincia, distrito, parroquia, persona, actoliturgico, horario, reserva
 -- Nota: password_hash usa bcrypt para la contraseña 'Admin123!'. Si tu hashing difiere, reemplaza el hash.
 
 BEGIN;
@@ -49,7 +49,7 @@ INSERT INTO public.parroquia (par_nombre, par_direccion, distritoid, par_telefon
 SELECT v.par_nombre, v.par_direccion, d.distritoid, v.tel1, v.tel2
 FROM (
   VALUES
-    ('Parroquia Catedral de Lambayeque', 'Plaza Principal S/N', 'LAMBAYEQUE', '074-200001', NULL),
+    ('Parroquia Catedral de Lambayeque', '2 de Mayo 555', 'LAMBAYEQUE', '074-200001', NULL),
     ('Parroquia San Antonio de Chiclayo', 'Av. Principal 123',  'CHICLAYO',   '074-200002', '074-200102'),
     ('Parroquia Sagrado Corazón - JLO',   'Jr. Central 456',    'JOSE LEONARDO ORTIZ', '074-200003', NULL)
 ) AS v(par_nombre, par_direccion, distrito_nom, tel1, tel2)
@@ -58,7 +58,7 @@ ON CONFLICT DO NOTHING;
 
 -- Personas (una asociada al admin y otras sin usuario)
 INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid)
-SELECT u.id, 'Administrador', 'General', 'Av. Admin 100', '999999999', DATE '1980-01-01', pr.parroquiaid
+SELECT u.id, 'Jose Juan', 'Pérez López', 'Av. Admin 100', '999999999', DATE '1980-01-01', pr.parroquiaid
 FROM public.users u
 JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Catedral de Lambayeque'
 WHERE u.email = 'admin@parroquia.com'
@@ -74,20 +74,229 @@ SELECT NULL, 'Juan', 'López', 'Av. 2', '912345678', DATE '1988-07-22', pr.parro
 FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Sagrado Corazón - JLO'
 ON CONFLICT DO NOTHING;
 
--- Actos Litúrgicos (ejemplos)
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_fecha, act_hora, act_descripcion, act_estado)
-SELECT pr.parroquiaid, 'misa', 'Misa Dominical', CURRENT_DATE + INTERVAL '1 day', TIME '09:00', 'Misa principal', TRUE
+-- Más personas para pruebas
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid)
+SELECT NULL, 'Ana', 'García', 'Calle 3', '923456789', DATE '1992-03-15', pr.parroquiaid
 FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_fecha, act_hora, act_descripcion, act_estado)
-SELECT pr.parroquiaid, 'bautismo', 'Bautismos Comunitarios', CURRENT_DATE + INTERVAL '2 day', TIME '11:00', 'Bautismos del mes', TRUE
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid)
+SELECT NULL, 'Carlos', 'Rodríguez', 'Av. 4', '934567890', DATE '1985-11-20', pr.parroquiaid
 FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia San Antonio de Chiclayo'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_fecha, act_hora, act_descripcion, act_estado)
-SELECT pr.parroquiaid, 'misa', 'Misa Vespertina', CURRENT_DATE + INTERVAL '3 day', TIME '18:30', 'Misa para jóvenes', TRUE
+-- Actos Litúrgicos básicos (sin fecha/hora específica)
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'misa', 'Misa Dominical', 'Misa principal de la parroquia cada domingo', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'misa', 'Misa Diaria', 'Misa diaria de lunes a sábado', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'bautismo', 'Bautismos Comunitarios', 'Bautismos del primer domingo del mes', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'matrimonio', 'Ceremonias Matrimoniales', 'Celebraciones matrimoniales con reserva previa', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'confirmacion', 'Confirmaciones', 'Ceremonia anual de confirmación', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'comunion', 'Primera Comunión', 'Ceremonia anual de primera comunión', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
+ON CONFLICT DO NOTHING;
+
+-- Actos para Parroquia San Antonio de Chiclayo
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'misa', 'Misa Dominical', 'Misa principal cada domingo', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia San Antonio de Chiclayo'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'bautismo', 'Bautismos Comunitarios', 'Bautismos mensuales', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia San Antonio de Chiclayo'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'exequias', 'Servicios Funerarios', 'Servicios de exequias y entierros', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia San Antonio de Chiclayo'
+ON CONFLICT DO NOTHING;
+
+-- Actos para Parroquia Sagrado Corazón - JLO
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'misa', 'Misa Dominical', 'Misa comunitaria cada domingo', TRUE
 FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Sagrado Corazón - JLO'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'misa', 'Misa Vespertina', 'Misa especial para jóvenes', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Sagrado Corazón - JLO'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
+SELECT pr.parroquiaid, 'matrimonio', 'Ceremonias Matrimoniales', 'Celebraciones matrimoniales especiales', TRUE
+FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Sagrado Corazón - JLO'
+ON CONFLICT DO NOTHING;
+
+-- Horarios específicos para los próximos 7 días (semana actual)
+-- Horarios para Parroquia Catedral de Lambayeque
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '1 day', TIME '09:00', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Misa Dominical'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '1 day', TIME '11:00', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Bautismos Comunitarios'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '2 day', TIME '07:00', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Misa Diaria'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '3 day', TIME '16:00', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Ceremonias Matrimoniales'
+ON CONFLICT DO NOTHING;
+
+-- Horarios para Parroquia San Antonio de Chiclayo
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '1 day', TIME '10:00', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia San Antonio de Chiclayo' AND a.act_titulo = 'Misa Dominical'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '2 day', TIME '11:00', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia San Antonio de Chiclayo' AND a.act_titulo = 'Bautismos Comunitarios'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '4 day', TIME '14:00', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia San Antonio de Chiclayo' AND a.act_titulo = 'Servicios Funerarios'
+ON CONFLICT DO NOTHING;
+
+-- Horarios para Parroquia Sagrado Corazón - JLO
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '1 day', TIME '09:30', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia Sagrado Corazón - JLO' AND a.act_titulo = 'Misa Dominical'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '3 day', TIME '18:30', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia Sagrado Corazón - JLO' AND a.act_titulo = 'Misa Vespertina'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '5 day', TIME '17:00', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia Sagrado Corazón - JLO' AND a.act_titulo = 'Ceremonias Matrimoniales'
+ON CONFLICT DO NOTHING;
+
+-- Más horarios para completar la semana
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '6 day', TIME '09:00', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Misa Dominical'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '7 day', TIME '09:00', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Misa Dominical'
+ON CONFLICT DO NOTHING;
+
+-- Reservas de prueba
+INSERT INTO public.reserva (horarioid, personaid, res_descripcion, res_estado)
+SELECT h.horarioid, per.personaid, 'Reserva para bautismo familiar', FALSE
+FROM public.horario h
+JOIN public.persona per ON per.per_nombres = 'Ana' AND per.per_apellidos = 'García'
+JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
+WHERE a.act_nombre = 'bautismo' AND h.h_fecha = CURRENT_DATE + INTERVAL '2 day'
+LIMIT 1
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.reserva (horarioid, personaid, res_descripcion, res_estado)
+SELECT h.horarioid, per.personaid, 'Ceremonia matrimonial especial', FALSE
+FROM public.horario h
+JOIN public.persona per ON per.per_nombres = 'Carlos' AND per.per_apellidos = 'Rodríguez'
+JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
+WHERE a.act_nombre = 'matrimonio' AND h.h_fecha = CURRENT_DATE + INTERVAL '3 day'
+LIMIT 1
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.reserva (horarioid, personaid, res_descripcion, res_estado)
+SELECT h.horarioid, per.personaid, 'Misa familiar dominical', FALSE
+FROM public.horario h
+JOIN public.persona per ON per.per_nombres = 'María' AND per.per_apellidos = 'Pérez'
+JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
+WHERE a.act_nombre = 'misa' AND h.h_fecha = CURRENT_DATE + INTERVAL '1 day' AND h.h_hora = TIME '09:00'
+LIMIT 1
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.reserva (horarioid, personaid, res_descripcion, res_estado)
+SELECT h.horarioid, per.personaid, 'Reserva para servicio funerario', TRUE
+FROM public.horario h
+JOIN public.persona per ON per.per_nombres = 'Juan' AND per.per_apellidos = 'López'
+JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
+WHERE a.act_nombre = 'exequias' AND h.h_fecha = CURRENT_DATE + INTERVAL '4 day'
+LIMIT 1
+ON CONFLICT DO NOTHING;
+
+-- Más reservas para tener datos variados
+INSERT INTO public.reserva (horarioid, personaid, res_descripcion, res_estado)
+SELECT h.horarioid, per.personaid, 'Misa vespertina para jóvenes', FALSE
+FROM public.horario h
+JOIN public.persona per ON per.per_nombres = 'Jose Juan' AND per.per_apellidos = 'Pérez López'
+JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
+WHERE a.act_titulo = 'Misa Vespertina' AND h.h_fecha = CURRENT_DATE + INTERVAL '3 day'
+LIMIT 1
+ON CONFLICT DO NOTHING;
+
+-- Crear más horarios para actos específicos que no tienen horario aún
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '14 day', TIME '10:00', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Confirmaciones'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, parroquiaid)
+SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '21 day', TIME '10:00', p.parroquiaid
+FROM public.actoliturgico a
+JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
+WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Primera Comunión'
 ON CONFLICT DO NOTHING;
 
 COMMIT;

@@ -7,11 +7,13 @@
       },
       "dependencies": {
             "autoprefixer": "^10.0.0",
+            "date-fns": "^4.1.0",
             "framer-motion": "latest",
             "lucide-react": "latest",
             "node.js": "^0.0.1-security",
             "postcss": "^8",
             "react": "^18.0.0",
+            "react-big-calendar": "^1.19.4",
             "react-dom": "^18.0.0",
             "react-router-dom": "latest",
             "react-scripts": "^5.0.0",
