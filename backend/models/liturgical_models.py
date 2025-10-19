@@ -40,13 +40,11 @@ class Horario(Base):
     actoliturgicoid = Column(Integer, ForeignKey('actoliturgico.actoliturgicoid'), nullable=False)
     h_fecha = Column(Date, nullable=False)  # fecha específica del horario
     h_hora = Column(Time, nullable=False)   # hora específica del horario
-    parroquiaid = Column(Integer, ForeignKey('parroquia.parroquiaid'), nullable=False)
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
 
     # Relaciones
     acto_liturgico = relationship("ActoLiturgico", back_populates="horarios")
-    parroquia = relationship("Parroquia", back_populates="horarios")
     reservas = relationship("Reserva", back_populates="horario", cascade="all, delete-orphan")
 
     def to_dict(self):
@@ -57,8 +55,8 @@ class Horario(Base):
             'acto_titulo': self.acto_liturgico.act_titulo if self.acto_liturgico else None,
             'h_fecha': self.h_fecha.isoformat() if self.h_fecha else None,
             'h_hora': self.h_hora.strftime('%H:%M') if self.h_hora else None,
-            'parroquiaid': self.parroquiaid,
-            'parroquia_nombre': self.parroquia.par_nombre if self.parroquia else None,
+            'parroquiaid': self.acto_liturgico.parroquiaid if self.acto_liturgico else None,
+            'parroquia_nombre': self.acto_liturgico.parroquia.par_nombre if self.acto_liturgico and self.acto_liturgico.parroquia else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -91,7 +89,7 @@ class Reserva(Base):
             'h_hora': self.horario.h_hora.strftime('%H:%M') if self.horario and self.horario.h_hora else None,
             'acto_nombre': self.horario.acto_liturgico.act_nombre if self.horario and self.horario.acto_liturgico else None,
             'acto_titulo': self.horario.acto_liturgico.act_titulo if self.horario and self.horario.acto_liturgico else None,
-            'parroquia_nombre': self.horario.parroquia.par_nombre if self.horario and self.horario.parroquia else None,
+            'parroquia_nombre': self.horario.acto_liturgico.parroquia.par_nombre if self.horario and self.horario.acto_liturgico and self.horario.acto_liturgico.parroquia else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

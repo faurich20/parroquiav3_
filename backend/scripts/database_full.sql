@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS public.user_preferences (
 INSERT INTO public.roles (name, description, permissions, is_active)
 VALUES
   (
-    'admin',
+    'Administrador',
     'Administrador del sistema',
     '[
       "menu_principal",
@@ -97,7 +97,7 @@ VALUES
     TRUE
   ),
   (
-    'user',
+    'Usuario',
     'Usuario estándar',
     '["menu_principal"]'::jsonb,
     TRUE
@@ -158,7 +158,9 @@ CREATE TABLE IF NOT EXISTS public.persona (
   per_domicilio    VARCHAR,
   per_telefono     VARCHAR,
   fecha_nacimiento DATE    NOT NULL,
-  parroquiaid      INTEGER NOT NULL REFERENCES public.parroquia(parroquiaid) ON DELETE RESTRICT
+  parroquiaid      INTEGER NOT NULL REFERENCES public.parroquia(parroquiaid) ON DELETE RESTRICT,
+  created_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 -- Actos litúrgicos (nuevo esquema principal)
@@ -182,20 +184,19 @@ CREATE TABLE IF NOT EXISTS public.horario (
   actoliturgicoid  INTEGER NOT NULL REFERENCES public.actoliturgico(actoliturgicoid) ON DELETE CASCADE,
   h_fecha          DATE NOT NULL, -- fecha específica del horario
   h_hora           TIME NOT NULL, -- hora específica del horario
-  parroquiaid      INTEGER NOT NULL REFERENCES public.parroquia(parroquiaid) ON DELETE CASCADE,
   created_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_horario_fecha ON public.horario(h_fecha);
 CREATE INDEX IF NOT EXISTS idx_horario_acto ON public.horario(actoliturgicoid);
-CREATE INDEX IF NOT EXISTS idx_horario_parroquia ON public.horario(parroquiaid);
 
 -- Reservas de actos litúrgicos
 CREATE TABLE IF NOT EXISTS public.reserva (
   reservaid        INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   horarioid        INTEGER NOT NULL REFERENCES public.horario(horarioid) ON DELETE CASCADE,
   personaid        INTEGER REFERENCES public.persona(personaid) ON DELETE SET NULL,
+  res_persona_nombre VARCHAR(255), -- Nombre de persona no registrada (si personaid es NULL)
   res_descripcion  TEXT NOT NULL,
   res_estado       BOOLEAN NOT NULL DEFAULT FALSE, -- true: Cancelado, false: Sin pagar
   created_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
@@ -205,6 +206,67 @@ CREATE TABLE IF NOT EXISTS public.reserva (
 CREATE INDEX IF NOT EXISTS idx_reserva_horario ON public.reserva(horarioid);
 CREATE INDEX IF NOT EXISTS idx_reserva_persona ON public.reserva(personaid);
 CREATE INDEX IF NOT EXISTS idx_reserva_estado ON public.reserva(res_estado);
+
+-- =========================================================
+-- 3C) Migración: Agregar columnas faltantes a tablas existentes
+-- =========================================================
+
+-- Agregar columnas created_at y updated_at a tabla persona existente
+DO $$
+BEGIN
+  -- Agregar columna created_at si no existe
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'persona' AND column_name = 'created_at'
+  ) THEN
+    ALTER TABLE public.persona ADD COLUMN created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW();
+  END IF;
+
+  -- Agregar columna updated_at si no existe
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'persona' AND column_name = 'updated_at'
+  ) THEN
+    ALTER TABLE public.persona ADD COLUMN updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW();
+  END IF;
+
+  -- Establecer valores por defecto para registros existentes
+  UPDATE public.persona SET created_at = NOW(), updated_at = NOW() WHERE created_at IS NULL OR updated_at IS NULL;
+END $$;
+
+-- Agregar columnas created_at y updated_at a otras tablas existentes si es necesario
+DO $$
+BEGIN
+  -- Verificar y agregar a roles si no existen
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'roles' AND column_name = 'created_at'
+  ) THEN
+    ALTER TABLE public.roles ADD COLUMN created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW();
+    ALTER TABLE public.roles ADD COLUMN updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW();
+    UPDATE public.roles SET created_at = NOW(), updated_at = NOW() WHERE created_at IS NULL OR updated_at IS NULL;
+  END IF;
+
+  -- Verificar y agregar a users si no existen
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'created_at'
+  ) THEN
+    ALTER TABLE public.users ADD COLUMN created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW();
+    ALTER TABLE public.users ADD COLUMN updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW();
+    UPDATE public.users SET created_at = NOW(), updated_at = NOW() WHERE created_at IS NULL OR updated_at IS NULL;
+  END IF;
+
+  -- Verificar y agregar a parroquia si no existen
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'parroquia' AND column_name = 'created_at'
+  ) THEN
+    ALTER TABLE public.parroquia ADD COLUMN created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW();
+    ALTER TABLE public.parroquia ADD COLUMN updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW();
+    UPDATE public.parroquia SET created_at = NOW(), updated_at = NOW() WHERE created_at IS NULL OR updated_at IS NULL;
+  END IF;
+END $$;
 
 -- =========================================================
 -- 4) Triggers de actualización de updated_at (opcional)
@@ -239,6 +301,15 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_persona_set_updated_at'
+  ) THEN
+    CREATE TRIGGER trg_persona_set_updated_at
+    BEFORE UPDATE ON public.persona
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
+  END IF;
+
+  IF NOT EXISTS (
     SELECT 1 FROM pg_trigger WHERE tgname = 'trg_actoliturgico_set_updated_at'
   ) THEN
     CREATE TRIGGER trg_actoliturgico_set_updated_at
@@ -265,6 +336,144 @@ BEGIN
     EXECUTE FUNCTION set_updated_at();
   END IF;
 END$$;
+
+-- =========================================================
+-- 5) Consultas útiles para el sistema litúrgico normalizado
+-- =========================================================
+
+-- NOTA: Los campos created_at y updated_at son útiles para:
+-- - Auditoría y trazabilidad: saber cuándo se creó/actualizó cada registro
+-- - Debugging: rastrear problemas por fecha de creación
+-- - Información al usuario: mostrar cuándo se programó un acto
+-- - Control de cambios: detectar conflictos de edición
+-- - Optimización: evitar reconsultas innecesarias
+
+-- Consulta completa para obtener actos litúrgicos con sus horarios
+SELECT
+  a.actoliturgicoid,
+  a.parroquiaid,
+  p.par_nombre as parroquia_nombre,
+  a.act_nombre,
+  a.act_titulo,
+  a.act_descripcion,
+  a.act_estado,
+  a.created_at,
+  a.updated_at,
+  h.horarioid,
+  h.h_fecha,
+  h.h_hora
+FROM public.actoliturgico a
+LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
+LEFT JOIN public.horario h ON a.actoliturgicoid = h.actoliturgicoid
+WHERE a.act_estado = TRUE
+ORDER BY a.actoliturgicoid, h.h_fecha, h.h_hora;
+
+-- Consulta para obtener reservas con información completa
+SELECT
+  r.reservaid,
+  r.horarioid,
+  r.personaid,
+  r.res_descripcion,
+  r.res_estado,
+  r.created_at,
+  r.updated_at,
+  h.h_fecha,
+  h.h_hora,
+  a.act_nombre,
+  a.act_titulo,
+  p.par_nombre as parroquia_nombre,
+  per.per_nombres || ' ' || per.per_apellidos as persona_nombre
+FROM public.reserva r
+LEFT JOIN public.horario h ON r.horarioid = h.horarioid
+LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
+LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
+LEFT JOIN public.persona per ON r.personaid = per.personaid
+ORDER BY h.h_fecha DESC, h.h_hora DESC;
+
+-- Consulta para obtener actos litúrgicos disponibles (para crear horarios)
+SELECT
+  actoliturgicoid,
+  act_nombre,
+  act_titulo,
+  act_descripcion,
+  p.par_nombre as parroquia_nombre
+FROM public.actoliturgico a
+LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
+WHERE a.act_estado = TRUE
+ORDER BY a.act_nombre, a.act_titulo;
+
+-- Consulta para obtener horarios por fecha específica (ejemplo para mañana)
+SELECT
+  h.horarioid,
+  h.h_fecha,
+  h.h_hora,
+  a.act_nombre,
+  a.act_titulo,
+  p.par_nombre as parroquia_nombre,
+  COUNT(r.reservaid) as reservas_total,
+  COUNT(CASE WHEN r.res_estado = FALSE THEN 1 END) as reservas_activas
+FROM public.horario h
+LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
+LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
+LEFT JOIN public.reserva r ON h.horarioid = r.horarioid
+WHERE h.h_fecha = CURRENT_DATE + INTERVAL '1 day' -- Ejemplo: horarios para mañana
+GROUP BY h.horarioid, h.h_fecha, h.h_hora, a.act_nombre, a.act_titulo, p.par_nombre
+ORDER BY h.h_hora;
+
+-- Consulta para obtener estadísticas de actos litúrgicos
+SELECT
+  a.act_nombre,
+  COUNT(h.horarioid) as total_horarios,
+  COUNT(r.reservaid) as total_reservas,
+  COUNT(CASE WHEN r.res_estado = FALSE THEN 1 END) as reservas_activas,
+  COUNT(CASE WHEN r.res_estado = TRUE THEN 1 END) as reservas_canceladas
+FROM public.actoliturgico a
+LEFT JOIN public.horario h ON a.actoliturgicoid = h.actoliturgicoid
+LEFT JOIN public.reserva r ON h.horarioid = r.horarioid
+WHERE a.act_estado = TRUE
+GROUP BY a.act_nombre
+ORDER BY total_horarios DESC;
+
+-- Consulta para calendario de actos litúrgicos (próximos 30 días)
+SELECT
+  h.h_fecha,
+  h.h_hora,
+  a.act_nombre,
+  a.act_titulo,
+  p.par_nombre as parroquia_nombre,
+  COUNT(r.reservaid) as reservas_count,
+  COUNT(CASE WHEN r.res_estado = FALSE THEN 1 END) as reservas_activas_count,
+  h.horarioid,
+  a.actoliturgicoid
+FROM public.horario h
+LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
+LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
+LEFT JOIN public.reserva r ON h.horarioid = r.horarioid
+WHERE h.h_fecha >= CURRENT_DATE
+  AND h.h_fecha < CURRENT_DATE + INTERVAL '30 days'
+GROUP BY h.h_fecha, h.h_hora, a.act_nombre, a.act_titulo, p.par_nombre, h.horarioid, a.actoliturgicoid
+ORDER BY h.h_fecha, h.h_hora;
+
+-- =========================================================
+-- 6) Notas importantes sobre el esquema normalizado
+-- =========================================================
+
+-- Estructura de datos:
+-- 1. actoliturgico: información básica del acto (nombre, título, descripción)
+-- 2. horario: fecha y hora específica donde se realiza el acto
+-- 3. reserva: reservas específicas para horarios específicos
+
+-- Ventajas de esta normalización:
+-- ✅ Un acto puede tener múltiples horarios (ej. misma misa en diferentes fechas)
+-- ✅ Las reservas están ligadas a horarios específicos
+-- ✅ Fácil mantenimiento y consultas
+-- ✅ Eliminación en cascada automática (borrar acto elimina horarios asociados)
+
+-- Los campos created_at y updated_at proporcionan:
+-- ✅ Auditoría completa de cambios
+-- ✅ Trazabilidad de cuándo se programó cada acto
+-- ✅ Información útil para debugging
+-- ✅ Control de versiones de datos
 
 -- 
 -- =========================================================

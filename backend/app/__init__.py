@@ -85,11 +85,24 @@ def create_app():
     @app.before_request
     def log_request_info():
         if request.path.startswith('/api/'):
-            print(f"🌐 Request: {request.method} {request.path}")
-            print(f"   Content-Type: {request.content_type}")
-            print(f"   Headers: {dict(request.headers)}")
-            if request.get_data():
-                print(f"   Body: {request.get_data(as_text=True)}")
+            import sys
+            msg = f"\n{'='*60}\n🌐 {request.method} {request.path}\n{'='*60}\n"
+            if request.args:
+                msg += f"📋 Query Params: {dict(request.args)}\n"
+            if request.get_json(silent=True):
+                msg += f"📦 JSON Body: {request.get_json(silent=True)}\n"
+            msg += f"{'='*60}\n"
+            sys.stdout.write(msg)
+            sys.stdout.flush()
+    
+    @app.after_request
+    def log_response_info(response):
+        if request.path.startswith('/api/'):
+            import sys
+            msg = f"✅ Response: {response.status_code} {response.status}\n\n"
+            sys.stdout.write(msg)
+            sys.stdout.flush()
+        return response
 
     # 🔧 Actualizar last_activity del usuario en cada request autenticada (si viene token access)
     #      - Usamos verify_jwt_in_request_optional para no forzar token en todas las rutas,

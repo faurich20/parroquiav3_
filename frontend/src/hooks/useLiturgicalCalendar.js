@@ -1,27 +1,18 @@
 // src/hooks/useLiturgicalCalendar.js
-import { useState, useEffect } from 'react';
-import { LITURGICAL_API } from '../constants/liturgical';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function useLiturgicalCalendar() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const { authFetch } = useAuth();
 
-  const fetchCalendar = async () => {
+  const fetchCalendar = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(LITURGICAL_API.calendario, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-
+      const response = await authFetch('http://localhost:5000/api/liturgical/calendario');
       const data = await response.json();
       setItems(data.items || []);
     } catch (err) {
@@ -30,23 +21,13 @@ export default function useLiturgicalCalendar() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authFetch]);
 
-  const fetchHorariosByDate = async (date) => {
+  const fetchHorariosByDate = useCallback(async (date) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${LITURGICAL_API.horarios_fecha}/${date}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`);
-      }
-
+      const response = await authFetch(`http://localhost:5000/api/liturgical/horarios/fecha/${date}`);
       const data = await response.json();
       return data.items || [];
     } catch (err) {
@@ -56,11 +37,11 @@ export default function useLiturgicalCalendar() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [authFetch]);
 
   useEffect(() => {
     fetchCalendar();
-  }, []);
+  }, [fetchCalendar]);
 
   return {
     items,

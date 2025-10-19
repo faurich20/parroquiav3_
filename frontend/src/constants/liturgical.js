@@ -1,19 +1,11 @@
-export const LITURGICAL_API = {
-  actos: 'http://localhost:5000/api/liturgical/actos',
-  horarios: 'http://localhost:5000/api/liturgical/horarios',
-  reservas: 'http://localhost:5000/api/liturgical/reservas',
-  calendario: 'http://localhost:5000/api/liturgical/calendario',
-  horarios_fecha: 'http://localhost:5000/api/liturgical/horarios/fecha',
+export const LITURGICAL_TYPES = {
+  misa: { label: 'Misa', color: '#4f46e5' },
+  bautismo: { label: 'Bautismo', color: '#10b981' },
+  matrimonio: { label: 'Matrimonio', color: '#ec4899' },
+  confirmacion: { label: 'Confirmación', color: '#f59e0b' },
+  comunion: { label: 'Primera Comunión', color: '#8b5cf6' },
+  exequias: { label: 'Exequias', color: '#6b7280' }
 };
-
-export const LITURGICAL_TYPES = [
-  { value: 'misa', label: 'Misa' },
-  { value: 'bautismo', label: 'Bautismo' },
-  { value: 'matrimonio', label: 'Matrimonio' },
-  { value: 'confirmacion', label: 'Confirmación' },
-  { value: 'comunion', label: 'Primera Comunión' },
-  { value: 'exequias', label: 'Exequias' },
-];
 
 export const ACTO_NOMBRES = [
   { value: 'misa', label: 'Misa' },

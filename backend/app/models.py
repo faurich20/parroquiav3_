@@ -148,7 +148,7 @@ class Parroquia(db.Model):
     distrito = db.relationship('Distrito')
     personas = db.relationship('Persona', back_populates='parroquia')
     actos_liturgicos = db.relationship('ActoLiturgico', back_populates='parroquia')
-    horarios = db.relationship('Horario', back_populates='parroquia')
+    # horarios eliminado - se obtiene mediante actos_liturgicos.horarios
 
     def to_dict(self):
         dis = self.distrito
@@ -219,7 +219,7 @@ class ActoLiturgico(db.Model):
         return {
             'actoliturgicoid': self.actoliturgicoid,
             'parroquiaid': self.parroquiaid,
-            'parroquia_nombre': self.parroquia.par_nombre if self.parroquia else None,
+            'parroquia_nombre': self.parroquia.par_nombre if self.parroquia and hasattr(self.parroquia, 'par_nombre') else None,
             'act_nombre': self.act_nombre,
             'act_titulo': self.act_titulo,
             'act_descripcion': self.act_descripcion,
@@ -236,12 +236,11 @@ class Horario(db.Model):
     actoliturgicoid = db.Column(db.Integer, db.ForeignKey('actoliturgico.actoliturgicoid'), nullable=False)
     h_fecha = db.Column(db.Date, nullable=False)  # fecha específica del horario
     h_hora = db.Column(db.Time, nullable=False)   # hora específica del horario
-    parroquiaid = db.Column(db.Integer, db.ForeignKey('parroquia.parroquiaid'), nullable=False)
+    # parroquiaid eliminado - se obtiene mediante acto_liturgico.parroquia
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     acto_liturgico = db.relationship('ActoLiturgico', back_populates='horarios')
-    parroquia = db.relationship('Parroquia', back_populates='horarios')
     reservas = db.relationship('Reserva', back_populates='horario', cascade='all, delete-orphan')
 
     def to_dict(self):
@@ -252,8 +251,8 @@ class Horario(db.Model):
             'acto_titulo': self.acto_liturgico.act_titulo if self.acto_liturgico else None,
             'h_fecha': self.h_fecha.isoformat() if self.h_fecha else None,
             'h_hora': self.h_hora.strftime('%H:%M') if self.h_hora else None,
-            'parroquiaid': self.parroquiaid,
-            'parroquia_nombre': self.parroquia.par_nombre if self.parroquia else None,
+            'parroquiaid': self.acto_liturgico.parroquiaid if self.acto_liturgico and hasattr(self.acto_liturgico, 'parroquiaid') else None,
+            'parroquia_nombre': self.acto_liturgico.parroquia.par_nombre if self.acto_liturgico and self.acto_liturgico.parroquia else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -265,6 +264,7 @@ class Reserva(db.Model):
     reservaid = db.Column(db.Integer, primary_key=True)
     horarioid = db.Column(db.Integer, db.ForeignKey('horario.horarioid'), nullable=False)
     personaid = db.Column(db.Integer, db.ForeignKey('persona.personaid'))
+    res_persona_nombre = db.Column(db.String(255))  # Nombre de persona no registrada
     res_descripcion = db.Column(db.Text, nullable=False)
     res_estado = db.Column(db.Boolean, default=False)  # true: Cancelado, false: Sin pagar
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -274,11 +274,20 @@ class Reserva(db.Model):
     persona = db.relationship('Persona', back_populates='reservas')
 
     def to_dict(self):
+        # Determinar el nombre de la persona (registrada o no registrada)
+        if self.persona:
+            persona_nombre = f"{self.persona.per_nombres} {self.persona.per_apellidos}"
+        elif self.res_persona_nombre:
+            persona_nombre = self.res_persona_nombre
+        else:
+            persona_nombre = None
+            
         return {
             'reservaid': self.reservaid,
             'horarioid': self.horarioid,
             'personaid': self.personaid,
-            'persona_nombre': f"{self.persona.per_nombres} {self.persona.per_apellidos}" if self.persona else None,
+            'persona_nombre': persona_nombre,
+            'res_persona_nombre': self.res_persona_nombre,
             'res_descripcion': self.res_descripcion,
             'res_estado': self.res_estado,  # true = Cancelado, false = Sin pagar
             'estado_texto': 'Cancelado' if self.res_estado else 'Sin pagar',
@@ -286,7 +295,8 @@ class Reserva(db.Model):
             'h_hora': self.horario.h_hora.strftime('%H:%M') if self.horario and self.horario.h_hora else None,
             'acto_nombre': self.horario.acto_liturgico.act_nombre if self.horario and self.horario.acto_liturgico else None,
             'acto_titulo': self.horario.acto_liturgico.act_titulo if self.horario and self.horario.acto_liturgico else None,
-            'parroquia_nombre': self.horario.parroquia.par_nombre if self.horario and self.horario.parroquia else None,
+            'parroquiaid': self.horario.acto_liturgico.parroquiaid if self.horario and self.horario.acto_liturgico and hasattr(self.horario.acto_liturgico, 'parroquiaid') else None,
+            'parroquia_nombre': self.horario.acto_liturgico.parroquia.par_nombre if self.horario and self.horario.acto_liturgico and self.horario.acto_liturgico.parroquia else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

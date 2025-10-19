@@ -80,3 +80,135 @@ body.modal-open {
 :root {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
+
+/* ================================
+   Estilos para React Big Calendar
+   ================================ */
+
+/* Mejorar la visualización de eventos en el calendario */
+.rbc-calendar {
+  font-family: inherit;
+}
+
+/* Ajustar altura de las celdas del mes para mostrar más eventos */
+.rbc-month-view .rbc-month-row {
+  min-height: 120px;
+}
+
+/* Mejorar el botón "Ver más" */
+.rbc-show-more {
+  background-color: var(--primary) !important;
+  color: white !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  margin-top: 2px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.rbc-show-more:hover {
+  opacity: 0.9 !important;
+  transform: scale(1.05) !important;
+}
+
+/* Estilo para el overlay de eventos */
+.rbc-overlay {
+  background-color: var(--surface) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  padding: 8px !important;
+  max-height: 400px !important;
+  overflow-y: auto !important;
+}
+
+.rbc-overlay-header {
+  border-bottom: 1px solid var(--border) !important;
+  padding-bottom: 8px !important;
+  margin-bottom: 8px !important;
+  font-weight: 600 !important;
+  color: var(--text) !important;
+}
+
+/* Mejorar el estilo de los eventos en el overlay */
+.rbc-event {
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.rbc-event:hover {
+  opacity: 0.85 !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Ajustar el header del calendario */
+.rbc-header {
+  padding: 10px 4px !important;
+  font-weight: 600 !important;
+  color: var(--text) !important;
+  background-color: var(--surface-2) !important;
+  border-bottom: 2px solid var(--border) !important;
+}
+
+/* Mejorar la visualización de la fecha actual */
+.rbc-today {
+  background-color: rgba(var(--primary-rgb, 59, 130, 246), 0.1) !important;
+}
+
+/* Ajustar el toolbar */
+.rbc-toolbar {
+  padding: 12px !important;
+  margin-bottom: 16px !important;
+  background-color: var(--surface-2) !important;
+  border-radius: 8px !important;
+}
+
+.rbc-toolbar button {
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  background-color: var(--surface) !important;
+  padding: 6px 12px !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+.rbc-toolbar button:hover {
+  background-color: var(--primary) !important;
+  color: white !important;
+  border-color: var(--primary) !important;
+}
+
+.rbc-toolbar button.rbc-active {
+  background-color: var(--primary) !important;
+  color: white !important;
+  border-color: var(--primary) !important;
+}
+
+/* Mejorar los slots de tiempo */
+.rbc-time-slot {
+  color: var(--muted) !important;
+}
+
+.rbc-day-slot .rbc-time-slot {
+  border-top: 1px solid var(--border) !important;
+}
+
+/* Ajustar el estilo de las celdas */
+.rbc-day-bg {
+  border-left: 1px solid var(--border) !important;
+}
+
+.rbc-month-row {
+  border-top: 1px solid var(--border) !important;
+}
+
+/* Mejorar la legibilidad de los eventos pequeños */
+.rbc-event-label {
+  font-size: 0.75rem !important;
+}
+
+.rbc-event-content {
+  font-size: 0.875rem !important;
+}

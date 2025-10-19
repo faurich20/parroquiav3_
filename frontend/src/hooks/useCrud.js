@@ -61,7 +61,12 @@ export default function useCrud(baseUrl, options = {}) {
       }
       const data = await resp.json();
       const item = data.item || data.role || data.user || data.data;
-      if (item) setItems(prev => prev.map(i => (i.id === id ? item : i)));
+      if (item) {
+        setItems(prev => prev.map(i => {
+          const itemId = i.id || i.reservaid || i.parroquiaid || i.horarioid;
+          return itemId === id ? item : i;
+        }));
+      }
       return { success: true, data };
     } catch (e) {
       return { success: false, error: e.message };
@@ -75,7 +80,10 @@ export default function useCrud(baseUrl, options = {}) {
         const e = await resp.json().catch(() => ({}));
         throw new Error(e.error || 'Error al eliminar');
       }
-      setItems(prev => prev.filter(i => i.id !== id));
+      setItems(prev => prev.filter(i => {
+        const itemId = i.id || i.reservaid || i.parroquiaid || i.horarioid;
+        return itemId !== id;
+      }));
       return { success: true };
     } catch (e) {
       return { success: false, error: e.message };

@@ -1,7 +1,6 @@
 // src/hooks/useLiturgicalSchedules.js
 import useCrud from './useCrud';
-import { LITURGICAL_API } from '../constants/liturgical';
 
 export default function useLiturgicalSchedules(options = {}) {
-  return useCrud(LITURGICAL_API.horarios, options);
+  return useCrud('http://localhost:5000/api/liturgical/horarios', options);
 }

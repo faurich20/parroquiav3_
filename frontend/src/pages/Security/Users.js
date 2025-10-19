@@ -22,23 +22,6 @@ const UsersPage = () => {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const { authFetch } = useAuth();
-
-    // Datos de prueba para desarrollo (remover en producción)
-    const testUsers = [
-      { id: 1, name: 'Usuario 1', email: 'user1@test.com', role: 'user', status: 'Activo' },
-      { id: 2, name: 'Usuario 2', email: 'user2@test.com', role: 'admin', status: 'Activo' },
-      { id: 3, name: 'Usuario 3', email: 'user3@test.com', role: 'user', status: 'Inactivo' },
-      { id: 4, name: 'Usuario 4', email: 'user4@test.com', role: 'secretaria', status: 'Activo' },
-      { id: 5, name: 'Usuario 5', email: 'user5@test.com', role: 'user', status: 'Activo' },
-      { id: 6, name: 'Usuario 6', email: 'user6@test.com', role: 'admin', status: 'Activo' },
-      { id: 7, name: 'Usuario 7', email: 'user7@test.com', role: 'user', status: 'Inactivo' },
-      { id: 8, name: 'Usuario 8', email: 'user8@test.com', role: 'user', status: 'Activo' },
-      { id: 9, name: 'Usuario 9', email: 'user9@test.com', role: 'admin', status: 'Activo' },
-      { id: 10, name: 'Usuario 10', email: 'user10@test.com', role: 'user', status: 'Activo' },
-    ];
-
-    // Usar datos reales si están disponibles, sino usar datos de prueba
-    const displayUsers = users.length > 0 ? users : testUsers;
     const [rolesList, setRolesList] = useState([]);
     const [parroquias, setParroquias] = useState([]);
     const [showPassword, setShowPassword] = useState(false);
@@ -259,7 +242,7 @@ const UsersPage = () => {
                     return (
                         <TablaConPaginacion
                             columns={columns}
-                            data={displayUsers}
+                            data={users}
                             rowKey={(u) => u.id}
                             searchTerm={searchTerm}
                             searchKeys={['name', 'email']}

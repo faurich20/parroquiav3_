@@ -1,9 +1,10 @@
 cd backend
 python -m venv venv 
-venv\Scripts\activate
+    venv\Scripts\activate
 
 pip install flask, flask-sqlalchemy, flask-migrate, flask-jwt-extended, flask-cors
-pip intall psycopg2,psycopg2-binary
+pip intall psycopg2
+pip install psycopg2-binary
 pip install python-dotenv
 pip install bcrypt
 pip install email-validator

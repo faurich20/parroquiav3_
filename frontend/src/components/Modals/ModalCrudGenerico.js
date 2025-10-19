@@ -113,7 +113,15 @@ const ModalCrudGenerico = ({
             <input
               type={campo.type}
               value={value || ''}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={(e) => {
+                setValue(e.target.value);
+                // Si este campo es una dependencia de otro, limpiar los campos dependientes
+                fields.forEach(f => {
+                  if (f.dependsOn === campo.name) {
+                    setValues(prev => ({ ...prev, [f.name]: '' }));
+                  }
+                });
+              }}
               placeholder={campo.placeholder}
               disabled={disabled}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
@@ -135,16 +143,24 @@ const ModalCrudGenerico = ({
           </div>
         );
       case 'select':
+        // Si el campo depende de otro, filtrar las opciones dinámicamente
+        let selectOptions = campo.options || [];
+        if (campo.dependsOn && campo.optionsFilter && typeof campo.optionsFilter === 'function') {
+          const dependValue = values[campo.dependsOn];
+          const filteredOptions = campo.optionsFilter(dependValue);
+          selectOptions = [{ value: '', label: campo.placeholder || 'Seleccione una opción' }, ...filteredOptions];
+        }
+        
         return (
           <div key={campo.name}>
             <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
             <select
               value={value || ''}
               onChange={(e) => setValue(e.target.value)}
-              disabled={disabled}
+              disabled={disabled || (campo.dependsOn && !values[campo.dependsOn])}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
             >
-              {(campo.options || []).map((opt) => (
+              {selectOptions.map((opt) => (
                 <option key={String(opt.value ?? opt)} value={opt.value ?? opt}>
                   {opt.label ?? opt}
                 </option>
@@ -163,6 +179,30 @@ const ModalCrudGenerico = ({
             />
             <span>{campo.label}</span>
           </label>
+        );
+      case 'combobox':
+        const listId = `${campo.name}-datalist`;
+        return (
+          <div key={campo.name}>
+            <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
+            <input
+              type="text"
+              value={value || ''}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={campo.placeholder}
+              disabled={disabled}
+              list={listId}
+              autoComplete="off"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+            />
+            <datalist id={listId}>
+              {(campo.options || []).map((opt, idx) => (
+                <option key={opt.value || idx} value={opt.label || opt.value}>
+                  {opt.label || opt.value}
+                </option>
+              ))}
+            </datalist>
+          </div>
         );
       default:
         return null;

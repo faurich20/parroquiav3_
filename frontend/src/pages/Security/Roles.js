@@ -362,7 +362,12 @@ const RolesPage = () => {
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-500 mb-1">Permisos</label>
-                            <div className="text-sm" style={{ color: 'var(--muted)' }}>{(vals.permisos || []).length} permiso(s)</div>
+                            <div className="text-sm" style={{ color: 'var(--text)' }}>
+                                {Array.isArray(vals.permisos) && vals.permisos.length > 0
+                                    ? vals.permisos.join(', ')
+                                    : 'Sin permisos'
+                                }
+                            </div>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>

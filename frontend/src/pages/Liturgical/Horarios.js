@@ -1,15 +1,17 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Calendar as BigCalendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Clock, Search, Plus } from 'lucide-react';
+import { Clock, Plus, Calendar, AlertCircle, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
+import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import useLiturgicalCalendar from '../../hooks/useLiturgicalCalendar';
-import { LITURGICAL_TYPES } from '../../constants/liturgical';
+import { LITURGICAL_TYPES, ACTO_NOMBRES } from '../../constants/liturgical';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Configuración de localización para español
 const locales = {
@@ -25,149 +27,441 @@ const localizer = dateFnsLocalizer({
 });
 
 const Horarios = () => {
-  const { items, loading, error } = useLiturgicalCalendar();
+  const { items, loading, error, refetch } = useLiturgicalCalendar();
+  const { user, authFetch } = useAuth();
   const [view, setView] = useState('month');
   const [date, setDate] = useState(new Date());
   const navigate = useNavigate();
+  
+  // Estados para el modal de detalle
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [parroquias, setParroquias] = useState([]);
 
-  // Datos de prueba para desarrollo (remover en producción)
-  const testHorarios = [
-    {
-      id: 1,
-      type: 'misa',
-      title: 'Misa Dominical',
-      start: new Date(2024, 0, 1, 10, 0), // Año, Mes (0-11), Día, Hora, Minuto
-      end: new Date(2024, 0, 1, 11, 0),
-      location: 'Capilla Principal',
-      is_active: true
-    },
-    // ... otros eventos de prueba
-  ];
+  // Recargar calendario cuando el usuario vuelve a estar autenticado
+  useEffect(() => {
+    if (user && refetch) {
+      refetch();
+    }
+  }, [user, refetch]);
 
-  // Mapear los datos al formato que espera el calendario
+  // Cargar parroquias para el modal
+  useEffect(() => {
+    const loadParroquias = async () => {
+      try {
+        const resp = await authFetch('http://localhost:5000/api/parroquias');
+        if (resp?.ok) {
+          const data = await resp.json();
+          setParroquias(data.parroquias || []);
+        }
+      } catch (err) {
+        console.error('Error cargando parroquias:', err);
+      }
+    };
+    if (user) {
+      loadParroquias();
+    }
+  }, [user, authFetch]);
+
+  // Mapear los datos de la API al formato que espera react-big-calendar
   const events = useMemo(() => {
-    const data = items.length > 0 ? items : testHorarios;
-    return data.map(event => ({
-      id: event.horarioid || event.id,
-      title: `${event.title || event.act_titulo} - ${event.location || event.parroquia_nombre}`,
-      start: new Date(`${event.date || event.h_fecha}T${event.time || event.h_hora}:00`),
-      end: new Date(`${event.date || event.h_fecha}T${event.time || event.h_hora}:00`).getTime() + 3600000, // +1 hora
-      location: event.location || event.parroquia_nombre,
-      type: event.type || event.act_nombre,
-      allDay: false
-    }));
+    if (!items || items.length === 0) {
+      return [];
+    }
+
+    return items.map(event => {
+      try {
+        // La API devuelve: date (YYYY-MM-DD), time (HH:MM), type, title, location
+        const eventDate = event.date;
+        const eventTime = event.time;
+
+        if (!eventDate || !eventTime) {
+          console.warn('Horario sin fecha u hora:', event);
+          return null;
+        }
+
+        // Crear objeto Date combinando fecha y hora
+        const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
+        
+        // Validar que la fecha sea válida
+        if (isNaN(startDateTime.getTime())) {
+          console.warn('Fecha inválida:', eventDate, eventTime);
+          return null;
+        }
+
+        // Duración por defecto de 1 hora
+        const endDateTime = new Date(startDateTime.getTime() + (60 * 60 * 1000));
+
+        return {
+          id: event.horarioid,
+          title: event.title || 'Sin título',
+          start: startDateTime,
+          end: endDateTime,
+          location: event.location || 'Sin ubicación',
+          type: event.type || 'misa',
+          allDay: false,
+          reservas_count: event.reservas_count || 0,
+          reservas_activas_count: event.reservas_activas_count || 0,
+          actoliturgicoid: event.actoliturgicoid
+        };
+      } catch (error) {
+        console.error('Error procesando horario:', event, error);
+        return null;
+      }
+    }).filter(Boolean); // Filtrar eventos nulos
   }, [items]);
 
-  // Estilos personalizados para los eventos
+  // Estilos personalizados para los eventos según su tipo
   const eventStyleGetter = (event) => {
-    const backgroundColor = {
-      misa: '#4f46e5',      // indigo-600
-      bautismo: '#10b981',  // emerald-500
-      matrimonio: '#ec4899', // pink-500
-      confirmacion: '#f59e0b', // amber-500
-      comunion: '#8b5cf6',   // violet-500
-      exequias: '#6b7280'   // gray-500
-    }[event.type] || '#3b82f6'; // azul por defecto
+    const liturgicalType = LITURGICAL_TYPES[event.type];
+    const backgroundColor = liturgicalType ? liturgicalType.color : '#3b82f6';
 
     return {
       style: {
         backgroundColor,
-        borderRadius: '4px',
+        borderRadius: '5px',
         opacity: 0.9,
         color: 'white',
-        border: '0px',
+        border: 'none',
         display: 'block',
-        padding: '2px 8px',
-        fontSize: '0.875rem'
+        padding: '4px 8px',
+        fontSize: '0.875rem',
+        fontWeight: '500',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.12)'
       }
     };
   };
 
-  // Componente personalizado para mostrar el evento
+  // Componente personalizado para mostrar el evento en el calendario
   const EventComponent = ({ event }) => (
-    <div className="p-1">
-      <div className="font-medium text-sm">{event.title.split(' - ')[0]}</div>
-      <div className="text-xs opacity-90">{format(event.start, 'HH:mm')} - {format(new Date(event.end), 'HH:mm')}</div>
-      <div className="text-xs opacity-75">{event.location}</div>
+    <div className="overflow-hidden">
+      <div className="font-medium text-sm truncate">{event.title}</div>
+      <div className="text-xs opacity-90 flex items-center gap-1">
+        <Clock className="w-3 h-3" />
+        {format(event.start, 'HH:mm')}
+      </div>
+      {event.reservas_count > 0 && (
+        <div className="text-xs opacity-90">
+          📋 {event.reservas_activas_count}/{event.reservas_count} reservas
+        </div>
+      )}
     </div>
   );
 
+  // Manejador para crear nuevo evento al seleccionar un slot vacío
+  const handleSelectSlot = ({ start, end }) => {
+    const dateStr = format(start, 'yyyy-MM-dd');
+    const timeStr = format(start, 'HH:mm');
+    navigate(`/liturgico/gestionar?from=calendar&date=${dateStr}&time=${timeStr}`);
+  };
+
+  // Manejador para ver detalles del evento existente
+  const handleSelectEvent = async (event) => {
+    try {
+      // Buscar el evento completo en items usando el horarioid
+      const fullEvent = items.find(item => item.horarioid === event.id);
+      
+      if (fullEvent) {
+        // Preparar datos para el modal
+        setSelectedEvent({
+          actoliturgicoid: fullEvent.actoliturgicoid,
+          horarioid: fullEvent.horarioid,
+          act_nombre: fullEvent.type,
+          act_titulo: fullEvent.title,
+          parroquia_nombre: fullEvent.location,
+          h_fecha: fullEvent.date,
+          h_hora: fullEvent.time,
+          reservas_count: fullEvent.reservas_count,
+          reservas_activas_count: fullEvent.reservas_activas_count
+        });
+        setModalOpen(true);
+      }
+    } catch (err) {
+      console.error('Error al abrir detalle del evento:', err);
+    }
+  };
+
+  // Estado de carga
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Calendario Litúrgico"
+          subtitle="Visualiza y gestiona los horarios de actos litúrgicos"
+          icon={Clock}
+        />
+        <Card className="p-8">
+          <div className="flex items-center justify-center min-h-[500px]">
+            <div className="text-center">
+              <div 
+                className="animate-spin rounded-full h-16 w-16 border-b-4 mx-auto mb-4"
+                style={{ borderBottomColor: 'var(--primary)' }}
+              ></div>
+              <p className="text-gray-600 text-lg font-medium">Cargando calendario...</p>
+              <p className="text-gray-500 text-sm mt-2">Obteniendo horarios programados</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // Estado de error
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Calendario Litúrgico"
+          subtitle="Visualiza y gestiona los horarios de actos litúrgicos"
+          icon={Clock}
+        />
+        <Card className="p-8">
+          <div className="flex items-center justify-center min-h-[500px]">
+            <div className="text-center max-w-md">
+              <AlertCircle className="w-16 h-16 mx-auto mb-4 text-red-500" />
+              <h3 className="text-xl font-semibold text-gray-800 mb-2">Error al cargar el calendario</h3>
+              <p className="text-red-600 mb-6">{error}</p>
+              <motion.button
+                onClick={refetch}
+                className="text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 mx-auto transition-all hover:brightness-110 shadow-md"
+                style={{ 
+                  background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' 
+                }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <RefreshCw className="w-5 h-5" />
+                Reintentar
+              </motion.button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // Vista principal del calendario
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Horarios Litúrgicos"
-        subtitle="Visualiza los actos litúrgicos programados"
+        title="Calendario Litúrgico"
+        subtitle={`Visualiza y gestiona los horarios de actos litúrgicos (${events.length} horario${events.length !== 1 ? 's' : ''})`}
         icon={Clock}
       >
         <motion.button
           onClick={() => navigate('/liturgico/gestionar?from=calendar')}
-          className="text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110"
-          style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}
+          className="text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110 shadow-lg"
+          style={{ 
+            background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' 
+          }}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-5 h-5" />
           Nuevo Acto Litúrgico
         </motion.button>
       </PageHeader>
 
+      {/* Leyenda de tipos de actos */}
       <Card className="p-4">
-        <div className="h-[700px]">
-          <BigCalendar
-            localizer={localizer}
-            events={events}
-            startAccessor="start"
-            endAccessor={(event) => new Date(event.end)}
-            style={{ height: '100%' }}
-            view={view}
-            onView={setView}
-            date={date}
-            onNavigate={setDate}
-            defaultView="month"
-            views={['month', 'week', 'day', 'agenda']}
-            messages={{
-              next: "Siguiente",
-              previous: "Anterior",
-              today: "Hoy",
-              month: "Mes",
-              week: "Semana",
-              day: "Día",
-              agenda: "Agenda",
-              date: "Fecha",
-              time: "Hora",
-              event: "Evento",
-              noEventsInRange: "No hay eventos programados",
-              allDay: "Todo el día",
-              work_week: "Semana laboral",
-              yesterday: "Ayer",
-              tomorrow: "Mañana",
-              thisWeek: "Esta semana",
-              nextWeek: "Próxima semana",
-              lastWeek: "Semana pasada",
-              showMore: total => `+ Ver más (${total})`,
-            }}
-            eventPropGetter={eventStyleGetter}
-            components={{
-              event: EventComponent
-            }}
-            selectable
-            onSelectSlot={({ start, end }) => {
-              // Lógica para crear un nuevo evento al hacer clic en un espacio vacío
-              console.log('Crear nuevo evento desde:', start, 'hasta:', end);
-            }}
-            culture="es"
-            formats={{
-              dayFormat: 'EEEE d',
-              weekdayFormat: 'EEEE',
-              monthHeaderFormat: 'MMMM yyyy',
-              dayHeaderFormat: 'EEEE d',
-              timeGutterFormat: 'HH:mm',
-              eventTimeRangeFormat: ({ start, end }, culture, localizer) =>
-                `${localizer.format(start, 'HH:mm', culture)} - ${localizer.format(end, 'HH:mm', culture)}`,
-            }}
-          />
+        <div className="flex flex-wrap gap-4 items-center">
+          <span className="text-sm font-medium text-gray-700">Tipos de actos:</span>
+          {Object.entries(LITURGICAL_TYPES).map(([key, value]) => (
+            <div key={key} className="flex items-center gap-2">
+              <div
+                className="w-4 h-4 rounded"
+                style={{ backgroundColor: value.color }}
+              />
+              <span className="text-sm text-gray-600">{value.label}</span>
+            </div>
+          ))}
         </div>
       </Card>
+
+      {/* Calendario */}
+      <Card className="p-6">
+        <div className="h-[750px]">
+          {events.length === 0 ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center max-w-md">
+                <Calendar className="w-20 h-20 mx-auto mb-4 text-gray-300" />
+                <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                  No hay actos litúrgicos programados
+                </h3>
+                <p className="text-gray-500 mb-6">
+                  No hay Horarios programados en el rango visible. Comienza agregando tu primer acto litúrgico.
+                </p>
+                <motion.button
+                  onClick={() => navigate('/liturgico/gestionar?from=calendar')}
+                  className="text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 mx-auto transition-all hover:brightness-110 shadow-md"
+                  style={{ 
+                    background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' 
+                  }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Plus className="w-5 h-5" />
+                  Programar Primer Acto Litúrgico
+                </motion.button>
+              </div>
+            </div>
+          ) : (
+            <BigCalendar
+              localizer={localizer}
+              events={events}
+              startAccessor="start"
+              endAccessor="end"
+              style={{ height: '100%' }}
+              view={view}
+              onView={setView}
+              date={date}
+              onNavigate={setDate}
+              defaultView="month"
+              views={['month', 'week', 'day', 'agenda']}
+              messages={{
+                next: "Siguiente",
+                previous: "Anterior",
+                today: "Hoy",
+                month: "Mes",
+                week: "Semana",
+                day: "Día",
+                agenda: "Agenda",
+                date: "Fecha",
+                time: "Hora",
+                event: "Evento",
+                noEventsInRange: "No hay horarios programados en este rango",
+                allDay: "Todo el día",
+                work_week: "Semana laboral",
+                yesterday: "Ayer",
+                tomorrow: "Mañana",
+                thisWeek: "Esta semana",
+                nextWeek: "Próxima semana",
+                lastWeek: "Semana pasada",
+                showMore: total => `+ Ver ${total} más`,
+              }}
+              eventPropGetter={eventStyleGetter}
+              components={{
+                event: EventComponent
+              }}
+              selectable
+              onSelectSlot={handleSelectSlot}
+              onSelectEvent={handleSelectEvent}
+              culture="es"
+              formats={{
+                dayFormat: 'EEEE d',
+                weekdayFormat: 'EEEE',
+                monthHeaderFormat: 'MMMM yyyy',
+                dayHeaderFormat: 'EEEE, d MMMM',
+                dayRangeHeaderFormat: ({ start, end }, culture, localizer) =>
+                  `${localizer.format(start, 'd MMM', culture)} - ${localizer.format(end, 'd MMM', culture)}`,
+                agendaHeaderFormat: ({ start, end }, culture, localizer) =>
+                  `${localizer.format(start, 'd MMM', culture)} - ${localizer.format(end, 'd MMM yyyy', culture)}`,
+                timeGutterFormat: 'HH:mm',
+                eventTimeRangeFormat: ({ start, end }, culture, localizer) =>
+                  `${localizer.format(start, 'HH:mm', culture)} - ${localizer.format(end, 'HH:mm', culture)}`,
+                agendaTimeFormat: 'HH:mm',
+                agendaTimeRangeFormat: ({ start, end }, culture, localizer) =>
+                  `${localizer.format(start, 'HH:mm', culture)} - ${localizer.format(end, 'HH:mm', culture)}`,
+              }}
+              popup
+              popupOffset={{ x: 0, y: 5 }}
+              step={30}
+              timeslots={2}
+              min={new Date(2024, 0, 1, 6, 0, 0)} // Hora mínima: 6:00 AM
+              max={new Date(2024, 0, 1, 22, 0, 0)} // Hora máxima: 10:00 PM
+            />
+          )}
+        </div>
+      </Card>
+
+      {/* Información adicional */}
+      {events.length > 0 && (
+        <Card className="p-4">
+          <div className="flex items-center justify-between text-sm text-gray-600">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              <span>
+                Mostrando {events.length} horario{events.length !== 1 ? 's' : ''} programado{events.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <motion.button
+              onClick={refetch}
+              className="flex items-center gap-2 font-medium transition-colors"
+              style={{ color: 'var(--primary)' }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              <RefreshCw className="w-4 h-4" />
+              Actualizar
+            </motion.button>
+          </div>
+        </Card>
+      )}
+
+      {/* Modal de detalle del evento */}
+      {selectedEvent && (
+        <ModalCrudGenerico
+          isOpen={modalOpen}
+          mode="view"
+          title="Detalle del Horario"
+          icon={Clock}
+          initialValues={selectedEvent}
+          fields={[
+            { 
+              name: 'parroquia_nombre', 
+              label: 'Parroquia', 
+              type: 'text',
+              disabled: true 
+            },
+            { 
+              name: 'act_nombre', 
+              label: 'Acto Litúrgico', 
+              type: 'select',
+              options: ACTO_NOMBRES,
+              disabled: true 
+            },
+            { 
+              name: 'act_titulo', 
+              label: 'Título', 
+              type: 'text',
+              disabled: true 
+            },
+            { 
+              name: 'h_fecha', 
+              label: 'Fecha', 
+              type: 'date',
+              disabled: true 
+            },
+            { 
+              name: 'h_hora', 
+              label: 'Hora', 
+              type: 'time',
+              disabled: true 
+            },
+          ]}
+          onClose={() => {
+            setModalOpen(false);
+            setSelectedEvent(null);
+          }}
+          readOnlyContent={
+            selectedEvent.reservas_count > 0 && (
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="font-semibold text-blue-900 mb-2">📋 Información de Reservas</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-blue-700">Total de reservas:</span>
+                    <span className="ml-2 font-semibold text-blue-900">{selectedEvent.reservas_count}</span>
+                  </div>
+                  <div>
+                    <span className="text-blue-700">Reservas activas:</span>
+                    <span className="ml-2 font-semibold text-blue-900">{selectedEvent.reservas_activas_count}</span>
+                  </div>
+                </div>
+              </div>
+            )
+          }
+        />
+      )}
     </div>
   );
 };

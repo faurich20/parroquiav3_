@@ -14,6 +14,9 @@ const ModalBase = ({
   size = 'md', // 'sm'|'md'|'lg'|'xl'
   closeOnOverlay = false,
 }) => {
+  const { theme } = useTheme();
+  const isDark = theme === 'black';
+
   useEffect(() => {
     if (isOpen) document.body.classList.add('modal-open');
     return () => document.body.classList.remove('modal-open');
@@ -27,9 +30,6 @@ const ModalBase = ({
     lg: 'max-w-4xl',
     xl: 'max-w-6xl',
   };
-
-  const { theme } = useTheme();
-  const isDark = theme === 'black';
 
   const content = (
     <AnimatePresence>
