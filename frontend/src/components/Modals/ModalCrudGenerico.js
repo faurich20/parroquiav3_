@@ -18,7 +18,7 @@ const ModalCrudGenerico = ({
   note,
   readOnlyContent,
 }) => {
-  const [values, setValues] = useState(initialValues);
+  const [values, setValues] = useState({});
   const [errores, setErrores] = useState('');
   const [cargando, setCargando] = useState(false);
   const { theme } = useTheme();
@@ -28,14 +28,29 @@ const ModalCrudGenerico = ({
 
   useEffect(() => {
     if (isOpen) {
-      setValues(initialValues || {});
+      // Crear objeto con valores iniciales, usando defaultValue si no hay initialValue
+      const newValues = {};
+      fields.forEach(field => {
+        const initialValue = initialValues[field.name];
+        const defaultValue = field.defaultValue;
+
+        // Prioridad: initialValue > defaultValue > ''
+        newValues[field.name] = initialValue !== undefined ? initialValue :
+                               (defaultValue !== undefined ? defaultValue : '');
+      });
+
+      setValues(newValues);
       setErrores('');
       setCargando(false);
     }
-  }, [isOpen, initialValues, mode]);
+  }, [isOpen, initialValues, fields, mode]);
 
   const footer = useMemo(() => {
     if (soloLectura) {
+      // En modo view con readOnlyContent, no mostrar footer (el botón está dentro del contenido)
+      if (readOnlyContent) {
+        return null;
+      }
       return (
         <button
           type="button"
@@ -90,7 +105,7 @@ const ModalCrudGenerico = ({
         </div>
       </div>
     );
-  }, [cargando, soloLectura, mode, values, validate, onSubmit, onClose, note]);
+  }, [cargando, soloLectura, mode, values, validate, onSubmit, onClose, note, isDark, readOnlyContent]);
 
   const renderCampo = (campo) => {
     const value = values[campo.name];
@@ -112,7 +127,7 @@ const ModalCrudGenerico = ({
             <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
             <input
               type={campo.type}
-              value={value || ''}
+              defaultValue={campo.defaultValue || (initialValues[campo.name] || '')}
               onChange={(e) => {
                 setValue(e.target.value);
                 // Si este campo es una dependencia de otro, limpiar los campos dependientes
@@ -124,6 +139,7 @@ const ModalCrudGenerico = ({
               }}
               placeholder={campo.placeholder}
               disabled={disabled}
+              min={campo.min}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
             />
           </div>

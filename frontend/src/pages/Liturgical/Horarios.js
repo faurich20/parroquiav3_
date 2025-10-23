@@ -1,16 +1,16 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Calendar as BigCalendar, dateFnsLocalizer } from 'react-big-calendar';
-import { format, parse, startOfWeek, getDay } from 'date-fns';
+import { format, parse, startOfWeek, getDay, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Clock, Plus, Calendar, AlertCircle, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
-import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico';
+import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import useLiturgicalCalendar from '../../hooks/useLiturgicalCalendar';
-import { LITURGICAL_TYPES, ACTO_NOMBRES } from '../../constants/liturgical';
+import { LITURGICAL_TYPES } from '../../constants/liturgical';
 import { useAuth } from '../../contexts/AuthContext';
 
 // Configuración de localización para español
@@ -32,11 +32,8 @@ const Horarios = () => {
   const [view, setView] = useState('month');
   const [date, setDate] = useState(new Date());
   const navigate = useNavigate();
-  
-  // Estados para el modal de detalle
-  const [modalOpen, setModalOpen] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState(null);
-  const [parroquias, setParroquias] = useState([]);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingReservation, setPendingReservation] = useState(null);
 
   // Recargar calendario cuando el usuario vuelve a estar autenticado
   useEffect(() => {
@@ -44,24 +41,6 @@ const Horarios = () => {
       refetch();
     }
   }, [user, refetch]);
-
-  // Cargar parroquias para el modal
-  useEffect(() => {
-    const loadParroquias = async () => {
-      try {
-        const resp = await authFetch('http://localhost:5000/api/parroquias');
-        if (resp?.ok) {
-          const data = await resp.json();
-          setParroquias(data.parroquias || []);
-        }
-      } catch (err) {
-        console.error('Error cargando parroquias:', err);
-      }
-    };
-    if (user) {
-      loadParroquias();
-    }
-  }, [user, authFetch]);
 
   // Mapear los datos de la API al formato que espera react-big-calendar
   const events = useMemo(() => {
@@ -148,36 +127,79 @@ const Horarios = () => {
     </div>
   );
 
-  // Manejador para crear nuevo evento al seleccionar un slot vacío
+  // Manejador para crear nueva reserva al seleccionar un slot vacío
   const handleSelectSlot = ({ start, end }) => {
-    const dateStr = format(start, 'yyyy-MM-dd');
-    const timeStr = format(start, 'HH:mm');
-    navigate(`/liturgico/gestionar?from=calendar&date=${dateStr}&time=${timeStr}`);
+    // Validar que start y end existan
+    if (!start || !end) {
+      return;
+    }
+    
+    try {
+      // Validar que la fecha no sea anterior a hoy (sin mostrar alert)
+      const today = startOfDay(new Date());
+      const selectedDate = startOfDay(start);
+      
+      if (isBefore(selectedDate, today)) {
+        return; // Simplemente no hacer nada
+      }
+      
+      const dateStr = format(start, 'yyyy-MM-dd');
+      const timeStr = format(start, 'HH:mm');
+      
+      // Guardar datos y mostrar confirmación
+      setPendingReservation({ dateStr, timeStr, horarioid: null });
+      setConfirmOpen(true);
+    } catch (error) {
+      console.error('Error en handleSelectSlot:', error);
+      // No hacer nada si hay error
+    }
+  };
+  
+  // Confirmar creación de reserva
+  const confirmReservation = () => {
+    if (pendingReservation) {
+      const { dateStr, timeStr, horarioid } = pendingReservation;
+      if (horarioid) {
+        navigate(`/liturgico/reservas?from=calendar&horarioid=${horarioid}&date=${dateStr}&time=${timeStr}`);
+      } else {
+        navigate(`/liturgico/reservas?from=calendar&date=${dateStr}&time=${timeStr}`);
+      }
+    }
+    setConfirmOpen(false);
+    setPendingReservation(null);
   };
 
-  // Manejador para ver detalles del evento existente
+  // Manejador para redirigir a reservas al hacer click en un evento
   const handleSelectEvent = async (event) => {
+    // Validar que el evento exista
+    if (!event || !event.id) {
+      return;
+    }
+    
     try {
       // Buscar el evento completo en items usando el horarioid
       const fullEvent = items.find(item => item.horarioid === event.id);
       
-      if (fullEvent) {
-        // Preparar datos para el modal
-        setSelectedEvent({
-          actoliturgicoid: fullEvent.actoliturgicoid,
-          horarioid: fullEvent.horarioid,
-          act_nombre: fullEvent.type,
-          act_titulo: fullEvent.title,
-          parroquia_nombre: fullEvent.location,
-          h_fecha: fullEvent.date,
-          h_hora: fullEvent.time,
-          reservas_count: fullEvent.reservas_count,
-          reservas_activas_count: fullEvent.reservas_activas_count
+      if (fullEvent && fullEvent.date) {
+        // Validar que la fecha no sea anterior a hoy (sin mostrar alert)
+        const today = startOfDay(new Date());
+        const eventDate = startOfDay(new Date(fullEvent.date));
+        
+        if (isBefore(eventDate, today)) {
+          return; // Simplemente no hacer nada
+        }
+        
+        // Guardar datos y mostrar confirmación
+        setPendingReservation({
+          dateStr: fullEvent.date,
+          timeStr: fullEvent.time,
+          horarioid: fullEvent.horarioid
         });
-        setModalOpen(true);
+        setConfirmOpen(true);
       }
     } catch (err) {
       console.error('Error al abrir detalle del evento:', err);
+      // No hacer nada si hay error
     }
   };
 
@@ -398,70 +420,20 @@ const Horarios = () => {
         </Card>
       )}
 
-      {/* Modal de detalle del evento */}
-      {selectedEvent && (
-        <ModalCrudGenerico
-          isOpen={modalOpen}
-          mode="view"
-          title="Detalle del Horario"
-          icon={Clock}
-          initialValues={selectedEvent}
-          fields={[
-            { 
-              name: 'parroquia_nombre', 
-              label: 'Parroquia', 
-              type: 'text',
-              disabled: true 
-            },
-            { 
-              name: 'act_nombre', 
-              label: 'Acto Litúrgico', 
-              type: 'select',
-              options: ACTO_NOMBRES,
-              disabled: true 
-            },
-            { 
-              name: 'act_titulo', 
-              label: 'Título', 
-              type: 'text',
-              disabled: true 
-            },
-            { 
-              name: 'h_fecha', 
-              label: 'Fecha', 
-              type: 'date',
-              disabled: true 
-            },
-            { 
-              name: 'h_hora', 
-              label: 'Hora', 
-              type: 'time',
-              disabled: true 
-            },
-          ]}
-          onClose={() => {
-            setModalOpen(false);
-            setSelectedEvent(null);
-          }}
-          readOnlyContent={
-            selectedEvent.reservas_count > 0 && (
-              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="font-semibold text-blue-900 mb-2">📋 Información de Reservas</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-blue-700">Total de reservas:</span>
-                    <span className="ml-2 font-semibold text-blue-900">{selectedEvent.reservas_count}</span>
-                  </div>
-                  <div>
-                    <span className="text-blue-700">Reservas activas:</span>
-                    <span className="ml-2 font-semibold text-blue-900">{selectedEvent.reservas_activas_count}</span>
-                  </div>
-                </div>
-              </div>
-            )
-          }
-        />
-      )}
+      {/* Diálogo de confirmación */}
+      <DialogoConfirmacion
+        abierto={confirmOpen}
+        titulo="Confirmar Reserva"
+        mensaje="¿Desea hacer una reserva para esta fecha y hora?"
+        onConfirmar={confirmReservation}
+        onCancelar={() => {
+          setConfirmOpen(false);
+          setPendingReservation(null);
+        }}
+        confirmText="Sí, crear reserva"
+        cancelText="Cancelar"
+        isDanger={false}
+      />
     </div>
   );
 };

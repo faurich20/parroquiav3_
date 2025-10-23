@@ -319,7 +319,7 @@ const ParroquiasPage = () => {
       <ModalCrudGenerico
         isOpen={isModalOpen}
         mode={modalMode}
-        title={modalMode === 'add' ? 'Nueva Parroquia' : (modalMode === 'edit' ? 'Editar Parroquia' : 'Información de la Parroquia')}
+        title={modalMode === 'add' ? 'Nueva Parroquia' : (modalMode === 'edit' ? 'Editar Parroquia' : 'Detalle del parroquia')}
         icon={Church}
         initialValues={current || {}}
         fields={fields}
@@ -339,38 +339,11 @@ const ParroquiasPage = () => {
           return (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Info principal en dos columnas */}
-                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-white p-4 border rounded-lg">
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Nombre</label>
-                    <div className="text-gray-900 font-medium">{nombre || '-'}</div>
-                  </div>
-                  <div className="bg-white p-4 border rounded-lg">
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Dirección</label>
-                    <div className="text-gray-900 font-medium">{direccion || '-'}</div>
-                  </div>
-                  <div className="bg-white p-4 border rounded-lg">
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Departamento</label>
-                    <div className="text-gray-900 font-medium">{departamento || '-'}</div>
-                  </div>
-                  <div className="bg-white p-4 border rounded-lg">
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Provincia</label>
-                    <div className="text-gray-900 font-medium">{provincia || '-'}</div>
-                  </div>
-                  <div className="bg-white p-4 border rounded-lg">
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Distrito</label>
-                    <div className="text-gray-900 font-medium">{distrito || '-'}</div>
-                  </div>
-                  <div className="bg-white p-4 border rounded-lg">
-                    <label className="block text-sm font-medium text-gray-500 mb-1">Teléfonos</label>
-                    <div className="text-gray-900 font-medium">{(vals?.par_telefono1 || current?.par_telefono1 || '-') + ((vals?.par_telefono2 || current?.par_telefono2) ? ` / ${vals?.par_telefono2 || current?.par_telefono2}` : '')}</div>
-                  </div>
-                </div>
-                {/* Mapa compacto en columna lateral */}
-                <div className="bg-white p-3 border rounded-lg flex flex-col">
-                  <label className="block text-sm font-medium text-gray-500 mb-2">Ubicación</label>
+                {/* Mapa en el lado izquierdo (2/3 del espacio) */}
+                <div className="md:col-span-2 bg-white p-3 border rounded-lg flex flex-col">
+                  <label className="block text-sm font-medium text-gray-500 mb-2">🗺️ Ubicación</label>
                   {partes.length ? (
-                    <div className="w-full mx-auto rounded overflow-hidden" style={{ height: 220 }}>
+                    <div className="w-full mx-auto rounded overflow-hidden" style={{ height: 480 }}>
                       <iframe
                         title="Mapa de la Parroquia"
                         src={mapsSrc}
@@ -383,8 +356,57 @@ const ParroquiasPage = () => {
                       />
                     </div>
                   ) : (
-                    <div className="text-gray-500 italic">Sin datos suficientes para mapa</div>
+                    <div className="text-gray-500 italic h-64 flex items-center justify-center">
+                      Sin datos suficientes para mapa
+                    </div>
                   )}
+                </div>
+
+                {/* Datos en el lado derecho (1/3 del espacio) */}
+                <div className="space-y-3">
+                  <div className="bg-white p-3 border rounded-lg">
+                    <label className="block text-sm font-medium text-gray-500 mb-1">📋 Nombre</label>
+                    <div className="text-gray-900 font-medium text-sm">{nombre || '-'}</div>
+                  </div>
+
+                  <div className="bg-white p-3 border rounded-lg">
+                    <label className="block text-sm font-medium text-gray-500 mb-1">📍 Dirección</label>
+                    <div className="text-gray-900 font-medium text-sm">{direccion || '-'}</div>
+                  </div>
+
+                  <div className="bg-white p-3 border rounded-lg">
+                    <label className="block text-sm font-medium text-gray-500 mb-1">🏛️ Departamento</label>
+                    <div className="text-gray-900 font-medium text-sm">{departamento || '-'}</div>
+                  </div>
+
+                  <div className="bg-white p-3 border rounded-lg">
+                    <label className="block text-sm font-medium text-gray-500 mb-1">🏛️ Provincia</label>
+                    <div className="text-gray-900 font-medium text-sm">{provincia || '-'}</div>
+                  </div>
+
+                  <div className="bg-white p-3 border rounded-lg">
+                    <label className="block text-sm font-medium text-gray-500 mb-1">🏛️ Distrito</label>
+                    <div className="text-gray-900 font-medium text-sm">{distrito || '-'}</div>
+                  </div>
+
+                  <div className="bg-white p-3 border rounded-lg">
+                    <label className="block text-sm font-medium text-gray-500 mb-1">📞 Teléfonos</label>
+                    <div className="text-gray-900 font-medium text-sm">
+                      {(vals?.par_telefono1 || current?.par_telefono1 || '-') +
+                       ((vals?.par_telefono2 || current?.par_telefono2) ? ` / ${vals?.par_telefono2 || current?.par_telefono2}` : '')}
+                    </div>
+                  </div>
+
+                  {/* Botón cerrar dentro de la columna */}
+                  <div className="flex justify-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="w-full px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

@@ -1,6 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Calendar, Search, Pencil, Trash2, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useSearchParams } from 'react-router-dom';
+import { format } from 'date-fns';
 import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 import TablaConPaginacion from '../../components/Common/TablaConPaginacion';
@@ -14,6 +16,7 @@ import { useAuth } from '../../contexts/AuthContext';
 const Reservacion = () => {
   const { items, loading, error, createItem, updateItem, removeItem } = useLiturgicalReservations({ autoList: true });
   const { authFetch } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit' | 'view'
   const [current, setCurrent] = useState(null);
@@ -54,6 +57,42 @@ const Reservacion = () => {
     };
     loadHorarios();
   }, [authFetch]);
+
+  // Detectar si viene desde el calendario y abrir modal automáticamente
+  useEffect(() => {
+    const fromCalendar = searchParams.get('from');
+    const date = searchParams.get('date');
+    const time = searchParams.get('time');
+    const horarioid = searchParams.get('horarioid');
+
+    if (fromCalendar === 'calendar' && horarios.length > 0) {
+      // Buscar el horario que coincida con la fecha y hora
+      let selectedHorario = null;
+
+      if (horarioid) {
+        // Si viene horarioid, buscar por ID
+        selectedHorario = horarios.find(h => h.horarioid === parseInt(horarioid));
+      } else if (date && time) {
+        // Si viene fecha y hora, buscar por coincidencia
+        selectedHorario = horarios.find(h => h.h_fecha === date && h.h_hora === time);
+      }
+
+      // Abrir modal con valores iniciales
+      setModalMode('add');
+      setCurrent(selectedHorario ? {
+        horarioid: selectedHorario.horarioid,
+        h_fecha: selectedHorario.h_fecha,
+        h_hora: selectedHorario.h_hora
+      } : {
+        h_fecha: date || '',
+        h_hora: time || ''
+      });
+      setModalOpen(true);
+
+      // Limpiar parámetros de URL
+      setSearchParams({});
+    }
+  }, [searchParams, horarios, setSearchParams]);
 
   // Usar solo datos reales de la API
   const displayItems = items || [];
@@ -122,7 +161,7 @@ const Reservacion = () => {
   ]), []);
 
   // Preparar opciones de personas para el combobox
-  const personasOptions = useMemo(() => 
+  const personasOptions = useMemo(() =>
     personas.map(p => ({
       value: p.personaid,
       label: `${p.per_nombres} ${p.per_apellidos}`.trim()
@@ -131,18 +170,23 @@ const Reservacion = () => {
   );
 
   const fields = useMemo(() => {
+    // Obtener fecha actual para el placeholder y validación
+    const today = format(new Date(), 'yyyy-MM-dd');
+
     const baseFields = [
-      { 
-        name: 'h_fecha', 
-        label: 'Fecha', 
-        type: 'date', 
-        placeholder: 'Seleccione la fecha',
-        disabled: modalMode === 'view'
+      {
+        name: 'h_fecha',
+        label: 'Fecha',
+        type: 'date',
+        placeholder: today,
+        defaultValue: today,
+        disabled: modalMode === 'view',
+        min: today // Solo permitir fechas desde hoy en adelante
       },
-      { 
-        name: 'horarioid', 
-        label: 'Horario', 
-        type: 'select', 
+      {
+        name: 'horarioid',
+        label: 'Horario',
+        type: 'select',
         options: [{ value: '', label: 'Seleccione un horario' }],
         disabled: modalMode === 'view',
         dependsOn: 'h_fecha', // Indica que depende del campo h_fecha
@@ -156,10 +200,10 @@ const Reservacion = () => {
           }));
         }
       },
-      { 
-        name: 'persona_nombre', 
-        label: 'Persona', 
-        type: 'combobox', 
+      {
+        name: 'persona_nombre',
+        label: 'Persona',
+        type: 'combobox',
         options: personasOptions,
         placeholder: 'Seleccione o escriba el nombre',
         disabled: modalMode === 'view',
@@ -176,7 +220,15 @@ const Reservacion = () => {
   }, [modalMode, personasOptions, horarios]);
 
   const validate = (v) => {
-    if (!v.horarioid) return 'Ingrese el ID del horario';
+    // Validar fecha: no permitir fechas pasadas
+    if (v.h_fecha) {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      if (v.h_fecha < today) {
+        return 'No se pueden seleccionar fechas pasadas';
+      }
+    }
+
+    if (!v.horarioid) return 'Seleccione un horario';
     if (!v.res_descripcion?.trim()) return 'Ingrese la descripción';
     return '';
   };
