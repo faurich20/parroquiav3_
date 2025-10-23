@@ -28,7 +28,17 @@ const ModalCrudGenerico = ({
 
   useEffect(() => {
     if (isOpen) {
-      // Crear objeto con valores iniciales, usando defaultValue si no hay initialValue
+      // Solo resetear valores si el modal se acaba de abrir o si no hay valores previos escritos
+      const hasExistingValues = Object.values(values).some(val => val !== '' && val !== null && val !== undefined);
+
+      // Si ya hay valores escritos en el modal, no los resetear
+      if (hasExistingValues) {
+        setErrores('');
+        setCargando(false);
+        return;
+      }
+
+      // Crear objeto con valores iniciales solo si no hay valores existentes
       const newValues = {};
       fields.forEach(field => {
         const initialValue = initialValues[field.name];
@@ -40,6 +50,11 @@ const ModalCrudGenerico = ({
       });
 
       setValues(newValues);
+      setErrores('');
+      setCargando(false);
+    } else {
+      // Resetear cuando se cierra el modal
+      setValues({});
       setErrores('');
       setCargando(false);
     }
