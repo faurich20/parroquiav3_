@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, Search, Pencil, Trash2, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
@@ -6,12 +6,104 @@ import { format } from 'date-fns';
 import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 import TablaConPaginacion from '../../components/Common/TablaConPaginacion';
-import ActionButton from '../../components/Common/ActionButton';
 import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico';
 import useLiturgicalReservations from '../../hooks/useLiturgicalReservations';
 import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
 import { buildActionColumn } from '../../components/Common/ActionColumn';
 import { useAuth } from '../../contexts/AuthContext';
+import ModalBase from '../../components/Modals/ModalBase';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Configurar iconos de Leaflet
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+// Función de geocoding con Nominatim y cache local
+const geocodeParroquia = async (parroquia) => {
+  const cacheKey = `coords_${parroquia.parroquiaid}`;
+
+  // Verificar cache local primero
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    console.log('Usando coordenadas del cache para:', parroquia.par_nombre);
+    return JSON.parse(cached);
+  }
+
+  // Geocoding con Nominatim
+  try {
+    const query = `${parroquia.par_direccion}, ${parroquia.dis_nombre}, Lambayeque, Perú`;
+    const encodedQuery = encodeURIComponent(query);
+
+    console.log('Geocoding parroquia:', parroquia.par_nombre, '- Query:', query);
+
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=1`);
+    const data = await response.json();
+
+    if (data && data.length > 0) {
+      const coords = {
+        lat: parseFloat(data[0].lat),
+        lng: parseFloat(data[0].lon)
+      };
+
+      console.log('Geocoding exitoso para', parroquia.par_nombre, ':', coords);
+
+      // Guardar en cache local
+      localStorage.setItem(cacheKey, JSON.stringify(coords));
+
+      return coords;
+    } else {
+      console.log('Geocoding falló para', parroquia.par_nombre, '- usando coordenadas por defecto');
+    }
+  } catch (error) {
+    console.error('Error en geocoding para', parroquia.par_nombre, ':', error);
+  }
+
+  // Fallback a coordenadas hardcodeadas por distrito
+  return getFallbackCoords(parroquia.dis_nombre);
+};
+
+// Coordenadas de fallback por distrito
+const getFallbackCoords = (distrito) => {
+  const fallbacks = {
+    'LAMBAYEQUE': { lat: -6.7063, lng: -79.9066 },
+    'CHICLAYO': { lat: -6.7651, lng: -79.8542 },
+    'JOSE LEONARDO ORTIZ': { lat: -6.7596, lng: -79.8538 },
+    // Coordenadas por defecto para distritos desconocidos
+    'default': { lat: -6.7714, lng: -79.8409 }
+  };
+
+  return fallbacks[distrito] || fallbacks.default;
+};
+
+// Iconos personalizados para cada parroquia
+const createCustomIcon = (label) => {
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="
+      background-color: #3b82f6;
+      color: white;
+      border-radius: 50%;
+      width: 35px;
+      height: 35px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 16px;
+      border: 3px solid white;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    ">${label}</div>`,
+    iconSize: [35, 35],
+    iconAnchor: [17.5, 35],
+    popupAnchor: [0, -35]
+  });
+};
 
 const Reservacion = () => {
   const { items, loading, error, createItem, updateItem, removeItem } = useLiturgicalReservations({ autoList: true });
@@ -22,10 +114,38 @@ const Reservacion = () => {
   const [current, setCurrent] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
   const [personas, setPersonas] = useState([]);
-  const [horarios, setHorarios] = useState([]); // Declaración explícita de horarios
+  const [horarios, setHorarios] = useState([]);
   const [parroquias, setParroquias] = useState([]);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [mapKey, setMapKey] = useState(0);
+  // Hook personalizado para geocoding de parroquias
+  const [parroquiasCoords, setParroquiasCoords] = useState({});
+
+  // Geocoding de todas las parroquias cuando se cargan
+  useEffect(() => {
+    const geocodeAllParroquias = async () => {
+      if (!parroquias.length) return;
+
+      const coordsPromises = parroquias.map(async (parroquia) => {
+        const coords = await geocodeParroquia(parroquia);
+        return { parroquiaid: parroquia.parroquiaid, coords, parroquia };
+      });
+
+      const results = await Promise.all(coordsPromises);
+      const coordsMap = {};
+      results.forEach(({ parroquiaid, coords, parroquia }) => {
+        coordsMap[parroquiaid] = { coords, parroquia };
+      });
+
+      setParroquiasCoords(coordsMap);
+      console.log('Geocoding completado para todas las parroquias:', coordsMap);
+    };
+
+    geocodeAllParroquias();
+  }, [parroquias]);
+
+  // Cargar parroquias
   useEffect(() => {
     const loadParroquias = async () => {
       try {
@@ -41,7 +161,7 @@ const Reservacion = () => {
     loadParroquias();
   }, [authFetch]);
 
-  // Cargar personas desde la API
+  // Cargar personas
   useEffect(() => {
     const loadPersonas = async () => {
       try {
@@ -57,7 +177,7 @@ const Reservacion = () => {
     loadPersonas();
   }, [authFetch]);
 
-  // Cargar horarios desde la API
+  // Cargar horarios
   useEffect(() => {
     const loadHorarios = async () => {
       try {
@@ -73,50 +193,233 @@ const Reservacion = () => {
     loadHorarios();
   }, [authFetch]);
 
-  // Detectar si viene desde el calendario y abrir modal automáticamente
-  useEffect(() => {
-    const fromCalendar = searchParams.get('from');
-    const date = searchParams.get('date');
-    const time = searchParams.get('time');
-    const horarioid = searchParams.get('horarioid');
+  // Función para renderizar modal personalizada con mapa
+  const renderReservationModal = () => {
+    if (!modalOpen || modalMode !== 'add') return null;
 
-    if (fromCalendar === 'calendar') {
-      // Si viene con parámetros específicos (click en slot/evento), buscar horario correspondiente
-      if (horarioid && horarios.length > 0) {
-        // Buscar el horario que coincida con el ID
-        const selectedHorario = horarios.find(h => h.horarioid === parseInt(horarioid));
+    return (
+      <ModalBase
+        isOpen={modalOpen}
+        title="Nueva Reserva"
+        icon={Calendar}
+        onClose={() => setModalOpen(false)}
+        size="xl"
+        closeOnOverlay={false}
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
+          {/* Columna izquierda: Mapa */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-lg font-semibold text-gray-700">
+              <span className="text-2xl">🗺️</span>
+              Ubicación de Parroquias
+            </div>
+            <div className="rounded-lg overflow-hidden border border-gray-200">
+              {/* Mapa interactivo con marcadores individuales usando React Leaflet */}
+              <div className="w-full rounded overflow-hidden" style={{ height: 600 }}>
+                <MapContainer
+                  key={mapKey}
+                  center={[-6.7437, -79.8715]} // Centro promedio calculado
+                  zoom={10}
+                  style={{ height: '100%', width: '100%' }}
+                  scrollWheelZoom={true}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
 
-        // Abrir modal con valores iniciales
-        setModalMode('add');
-        setCurrent(selectedHorario ? {
-          horarioid: selectedHorario.horarioid,
-          h_fecha: selectedHorario.h_fecha,
-          h_hora: selectedHorario.h_hora
-        } : {});
-        setModalOpen(true);
-      }
-      // Si viene con date/time (click en slot vacío), abrir modal con esos valores
-      else if (date && time) {
-        setModalMode('add');
-        setCurrent({
-          h_fecha: date,
-          h_hora: time
-        });
-        setModalOpen(true);
-      }
-      // Si viene sin parámetros específicos (botón "Realizar Reserva"), abrir modal vacío
-      else if (!horarioid && !date && !time) {
-        setModalMode('add');
-        setCurrent({});
-        setModalOpen(true);
-      }
+                  {/* Marcadores dinámicos para cada parroquia usando geocoding */}
+                  {Object.entries(parroquiasCoords).map(([parroquiaId, { coords, parroquia }]) => (
+                    <Marker
+                      key={parroquiaId}
+                      position={[coords.lat, coords.lng]}
+                      icon={createCustomIcon('⛪')}
+                      eventHandlers={{
+                        mouseover: (e) => {
+                          e.target.openPopup();
+                        },
+                        mouseout: (e) => {
+                          e.target.closePopup();
+                        },
+                        click: (e) => {
+                          // Mantener funcionalidad de click también
+                          e.target.openPopup();
+                        }
+                      }}
+                    >
+                      <Popup>
+                        <div className="text-sm p-2">
+                          <div className="font-bold text-lg mb-1">{parroquia.par_nombre}</div>
+                          <div className="text-gray-600 mb-1">{parroquia.par_direccion}</div>
+                          <div className="text-gray-500 mb-2">{parroquia.dis_nombre}</div>
+                          <div className="text-green-600 text-xs font-mono">
+                            📍 {coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}
+                          </div>
+                          <div className="text-blue-600 text-xs mt-1">
+                            Geocodificado automáticamente
+                          </div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ))}
+                </MapContainer>
+              </div>
+            </div>
+          </div>
 
-      // Limpiar parámetros de URL después de un pequeño delay
-      setTimeout(() => {
-        setSearchParams({});
-      }, 100);
+          {/* Columna derecha: Formulario */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-lg font-semibold text-gray-700">
+              <span className="text-2xl">📋</span>
+              Información de la Reserva
+            </div>
+
+            {/* Renderizar campos del formulario aquí */}
+            <div className="space-y-4">
+              {fields.map((field) => renderField(field))}
+            </div>
+
+            {/* Botones */}
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-black hover:text-gray-900"
+              >
+                Cerrar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  // Lógica para crear reserva
+                  const validationError = validate(current || {});
+                  if (validationError) {
+                    alert(validationError);
+                    return;
+                  }
+                  const result = await handleSubmit(current || {});
+                  if (result?.success) {
+                    setModalOpen(false);
+                  } else {
+                    alert(result?.error || 'Error al crear reserva');
+                  }
+                }}
+                className="flex-1 px-4 py-2 text-white rounded-lg hover:brightness-110"
+                style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}
+              >
+                Crear Reserva
+              </button>
+            </div>
+          </div>
+        </div>
+      </ModalBase>
+    );
+  };
+
+  // Función para renderizar campos del formulario
+  const renderField = (campo) => {
+    const value = (current || {})[campo.name] || '';
+    const setValue = (v) => setCurrent(prev => ({ ...prev, [campo.name]: v }));
+
+    switch (campo.type) {
+      case 'text':
+      case 'email':
+      case 'date':
+      case 'time':
+        return (
+          <div key={campo.name}>
+            <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
+            <input
+              type={campo.type}
+              value={value}
+              onChange={(e) => {
+                setValue(e.target.value);
+                // Limpiar campos dependientes
+                fields.forEach(f => {
+                  if (f.dependsOn && (current || {})[f.dependsOn]) {
+                    setCurrent(prev => ({ ...prev, [f.name]: '' }));
+                  }
+                });
+              }}
+              placeholder={campo.placeholder}
+              min={campo.min}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+            />
+          </div>
+        );
+      case 'select':
+        let selectOptions = campo.options || [];
+        if (campo.dependsOn && campo.optionsFilter && typeof campo.optionsFilter === 'function') {
+          const dependValue = (current || {})[campo.dependsOn];
+          const filteredOptions = campo.optionsFilter(dependValue, current || {});
+          selectOptions = [{ value: '', label: campo.placeholder || 'Seleccione una opción' }, ...filteredOptions];
+        }
+
+        return (
+          <div key={campo.name}>
+            <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
+            <select
+              value={value}
+              onChange={(e) => {
+                setValue(e.target.value);
+                // Limpiar campos dependientes
+                fields.forEach(f => {
+                  if (f.dependsOn && (current || {})[f.dependsOn]) {
+                    setCurrent(prev => ({ ...prev, [f.name]: '' }));
+                  }
+                });
+              }}
+              disabled={campo.dependsOn && !(current || {})[campo.dependsOn]}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+            >
+              {selectOptions.map((opt) => (
+                <option key={String(opt.value ?? opt)} value={opt.value ?? opt}>
+                  {opt.label ?? opt}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      case 'combobox':
+        const listId = `${campo.name}-datalist`;
+        return (
+          <div key={campo.name}>
+            <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={campo.placeholder}
+              list={listId}
+              autoComplete="off"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+            />
+            <datalist id={listId}>
+              {(campo.options || []).map((opt, idx) => (
+                <option key={opt.value || idx} value={opt.label || opt.value}>
+                  {opt.label || opt.value}
+                </option>
+              ))}
+            </datalist>
+          </div>
+        );
+      case 'textarea':
+        return (
+          <div key={campo.name}>
+            <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
+            <textarea
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={campo.placeholder}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+            />
+          </div>
+        );
+      default:
+        return null;
     }
-  }, [searchParams, horarios, setSearchParams]);
+  };
 
   // Usar solo datos reales de la API
   const displayItems = items || [];
@@ -365,10 +668,14 @@ const Reservacion = () => {
         })()}
       </Card>
 
+      {/* Modal personalizado para nueva reserva con mapa */}
+      {renderReservationModal()}
+
+      {/* Modal estándar para editar/ver reservas */}
       <ModalCrudGenerico
-        isOpen={modalOpen}
+        isOpen={modalOpen && modalMode !== 'add'}
         mode={modalMode}
-        title={modalMode === 'add' ? 'Nueva Reserva' : modalMode === 'edit' ? 'Editar Reserva' : 'Detalle de Reserva'}
+        title={modalMode === 'edit' ? 'Editar Reserva' : 'Detalle de Reserva'}
         icon={Calendar}
         initialValues={current || {}}
         fields={fields}

@@ -10,6 +10,18 @@ import useCrud from '../../hooks/useCrud';
 import { buildActionColumn } from '../../components/Common/ActionColumn';
 import { useAuth } from '../../contexts/AuthContext';
 
+// Función para obtener coordenadas aproximadas por distrito
+const getCoordenadasPorDistrito = (distrito) => {
+  const coordenadasDistritos = {
+    'LAMBAYEQUE': { lat: -6.7063, lng: -79.9066 },
+    'CHICLAYO': { lat: -6.7651, lng: -79.8542 },
+    'JOSE LEONARDO ORTIZ': { lat: -6.7596, lng: -79.8538 },
+    // Agregar más distritos según sea necesario
+  };
+
+  return coordenadasDistritos[distrito] || { lat: -6.7714, lng: -79.8409 }; // Centro de Lambayeque por defecto
+};
+
 const ParroquiasPage = () => {
   const { items, loading, error, createItem, updateItem, removeItem } = useCrud('http://localhost:5000/api/parroquias');
   const { authFetch } = useAuth();
@@ -334,8 +346,10 @@ const ParroquiasPage = () => {
           const provincia = vals?.prov_nombre || current?.prov_nombre || '';
           const departamento = vals?.dep_nombre || current?.dep_nombre || '';
           const partes = [direccion, distrito, provincia, departamento, 'Perú'].filter(Boolean);
-          const query = encodeURIComponent(partes.join(', '));
-          const mapsSrc = `https://www.google.com/maps?q=${query}&z=16&output=embed`;
+          const coords = getCoordenadasPorDistrito(distrito);
+          const bboxPadding = 0.05; // Padding para el bbox
+          const bbox = `${coords.lng - bboxPadding},${coords.lat - bboxPadding},${coords.lng + bboxPadding},${coords.lat + bboxPadding}`;
+          const mapsSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${coords.lat},${coords.lng}`;
           return (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -354,6 +368,9 @@ const ParroquiasPage = () => {
                         loading="lazy"
                         referrerPolicy="no-referrer-when-downgrade"
                       />
+                      <div className="mt-2 text-xs text-gray-600 text-center">
+                        📍 Ubicación aproximada en {distrito} - {provincia}, {departamento}
+                      </div>
                     </div>
                   ) : (
                     <div className="text-gray-500 italic h-64 flex items-center justify-center">
