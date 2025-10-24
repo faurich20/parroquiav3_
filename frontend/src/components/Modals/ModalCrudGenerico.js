@@ -18,6 +18,7 @@ const ModalCrudGenerico = ({
   note,
   readOnlyContent,
 }) => {
+  const [renderTrigger, setRenderTrigger] = useState(0); // Para forzar re-renderización
   const [values, setValues] = useState({});
   const [errores, setErrores] = useState('');
   const [cargando, setCargando] = useState(false);
@@ -120,11 +121,14 @@ const ModalCrudGenerico = ({
         </div>
       </div>
     );
-  }, [cargando, soloLectura, mode, values, validate, onSubmit, onClose, note, isDark, readOnlyContent]);
+  }, [cargando, soloLectura, mode, values, validate, onSubmit, onClose, note, isDark, readOnlyContent, renderTrigger]);
 
   const renderCampo = (campo) => {
     const value = values[campo.name];
-    const setValue = (v) => setValues(prev => ({ ...prev, [campo.name]: v }));
+    const setValue = (v) => {
+      setValues(prev => ({ ...prev, [campo.name]: v }));
+      setRenderTrigger(prev => prev + 1); // Forzar re-renderización
+    };
     const disabled = soloLectura || campo.disabled;
 
     if (campo.type === 'custom' && typeof campo.render === 'function') {
@@ -142,12 +146,13 @@ const ModalCrudGenerico = ({
             <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
             <input
               type={campo.type}
-              defaultValue={campo.defaultValue || (initialValues[campo.name] || '')}
+              value={value || ''}
               onChange={(e) => {
                 setValue(e.target.value);
-                // Si este campo es una dependencia de otro, limpiar los campos dependientes
+                // Limpiar campos que dependen de otros campos cuando cambie cualquier valor
                 fields.forEach(f => {
-                  if (f.dependsOn === campo.name) {
+                  if (f.dependsOn && values[f.dependsOn]) {
+                    // Si el campo depende de otro y ese otro tiene valor, limpiar este campo
                     setValues(prev => ({ ...prev, [f.name]: '' }));
                   }
                 });
@@ -178,7 +183,7 @@ const ModalCrudGenerico = ({
         let selectOptions = campo.options || [];
         if (campo.dependsOn && campo.optionsFilter && typeof campo.optionsFilter === 'function') {
           const dependValue = values[campo.dependsOn];
-          const filteredOptions = campo.optionsFilter(dependValue);
+          const filteredOptions = campo.optionsFilter(dependValue, values);
           selectOptions = [{ value: '', label: campo.placeholder || 'Seleccione una opción' }, ...filteredOptions];
         }
         
@@ -187,7 +192,16 @@ const ModalCrudGenerico = ({
             <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
             <select
               value={value || ''}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={(e) => {
+                setValue(e.target.value);
+                // Limpiar campos que dependen de otros campos cuando cambie cualquier valor
+                fields.forEach(f => {
+                  if (f.dependsOn && values[f.dependsOn]) {
+                    // Si el campo depende de otro y ese otro tiene valor, limpiar este campo
+                    setValues(prev => ({ ...prev, [f.name]: '' }));
+                  }
+                });
+              }}
               disabled={disabled || (campo.dependsOn && !values[campo.dependsOn])}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
             >

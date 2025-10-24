@@ -24,7 +24,22 @@ const Reservacion = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [personas, setPersonas] = useState([]);
-  const [horarios, setHorarios] = useState([]);
+  const [horarios, setHorarios] = useState([]); // Declaración explícita de horarios
+  const [parroquias, setParroquias] = useState([]);
+  useEffect(() => {
+    const loadParroquias = async () => {
+      try {
+        const resp = await authFetch('http://localhost:5000/api/parroquias');
+        if (resp?.ok) {
+          const data = await resp.json();
+          setParroquias(data.parroquias || []);
+        }
+      } catch (err) {
+        console.error('Error cargando parroquias:', err);
+      }
+    };
+    loadParroquias();
+  }, [authFetch]);
 
   // Cargar personas desde la API
   useEffect(() => {
@@ -65,32 +80,41 @@ const Reservacion = () => {
     const time = searchParams.get('time');
     const horarioid = searchParams.get('horarioid');
 
-    if (fromCalendar === 'calendar' && horarios.length > 0) {
-      // Buscar el horario que coincida con la fecha y hora
-      let selectedHorario = null;
+    if (fromCalendar === 'calendar') {
+      // Si viene con parámetros específicos (click en slot/evento), buscar horario correspondiente
+      if (horarioid && horarios.length > 0) {
+        // Buscar el horario que coincida con el ID
+        const selectedHorario = horarios.find(h => h.horarioid === parseInt(horarioid));
 
-      if (horarioid) {
-        // Si viene horarioid, buscar por ID
-        selectedHorario = horarios.find(h => h.horarioid === parseInt(horarioid));
-      } else if (date && time) {
-        // Si viene fecha y hora, buscar por coincidencia
-        selectedHorario = horarios.find(h => h.h_fecha === date && h.h_hora === time);
+        // Abrir modal con valores iniciales
+        setModalMode('add');
+        setCurrent(selectedHorario ? {
+          horarioid: selectedHorario.horarioid,
+          h_fecha: selectedHorario.h_fecha,
+          h_hora: selectedHorario.h_hora
+        } : {});
+        setModalOpen(true);
+      }
+      // Si viene con date/time (click en slot vacío), abrir modal con esos valores
+      else if (date && time) {
+        setModalMode('add');
+        setCurrent({
+          h_fecha: date,
+          h_hora: time
+        });
+        setModalOpen(true);
+      }
+      // Si viene sin parámetros específicos (botón "Realizar Reserva"), abrir modal vacío
+      else if (!horarioid && !date && !time) {
+        setModalMode('add');
+        setCurrent({});
+        setModalOpen(true);
       }
 
-      // Abrir modal con valores iniciales
-      setModalMode('add');
-      setCurrent(selectedHorario ? {
-        horarioid: selectedHorario.horarioid,
-        h_fecha: selectedHorario.h_fecha,
-        h_hora: selectedHorario.h_hora
-      } : {
-        h_fecha: date || '',
-        h_hora: time || ''
-      });
-      setModalOpen(true);
-
-      // Limpiar parámetros de URL
-      setSearchParams({});
+      // Limpiar parámetros de URL después de un pequeño delay
+      setTimeout(() => {
+        setSearchParams({});
+      }, 100);
     }
   }, [searchParams, horarios, setSearchParams]);
 
@@ -173,6 +197,24 @@ const Reservacion = () => {
     // Obtener fecha actual para el placeholder y validación
     const today = format(new Date(), 'yyyy-MM-dd');
 
+    // Función para filtrar horarios - definida dentro del useMemo para acceder a horarios
+    const filterHorarios = (parroquiaId, formValues) => {
+      if (!parroquiaId || !formValues?.h_fecha) return [];
+      // Filtrar horarios por parroquia y fecha seleccionada
+      const fechaSeleccionada = formValues.h_fecha;
+      const filtrados = (horarios || []).filter(h => {
+        if (!h.parroquiaid || !h.h_fecha) return false;
+        // Normalizar fechas para comparación (remover hora si existe)
+        const horarioFecha = h.h_fecha.split('T')[0]; // Obtener solo yyyy-MM-dd
+        return h.parroquiaid === parseInt(parroquiaId) &&
+               horarioFecha === fechaSeleccionada;
+      });
+      return filtrados.map(h => ({
+        value: h.horarioid,
+        label: `${h.h_hora} - ${h.acto_titulo || h.acto_nombre}`
+      }));
+    };
+
     const baseFields = [
       {
         name: 'h_fecha',
@@ -184,21 +226,23 @@ const Reservacion = () => {
         min: today // Solo permitir fechas desde hoy en adelante
       },
       {
+        name: 'parroquiaid',
+        label: 'Parroquia',
+        type: 'select',
+        options: [{ value: '', label: 'Seleccione una parroquia' }, ...parroquias.map(p => ({
+          value: p.parroquiaid,
+          label: `${p.par_nombre} - ${p.par_direccion} (${p.dis_nombre})`
+        }))],
+        disabled: modalMode === 'view'
+      },
+      {
         name: 'horarioid',
         label: 'Horario',
         type: 'select',
         options: [{ value: '', label: 'Seleccione un horario' }],
         disabled: modalMode === 'view',
-        dependsOn: 'h_fecha', // Indica que depende del campo h_fecha
-        optionsFilter: (fecha) => {
-          if (!fecha) return [];
-          // Filtrar horarios por la fecha seleccionada
-          const filtrados = horarios.filter(h => h.h_fecha === fecha);
-          return filtrados.map(h => ({
-            value: h.horarioid,
-            label: `${h.h_hora} - ${h.acto_titulo || h.acto_nombre || h.act_titulo || h.act_nombre}`
-          }));
-        }
+        dependsOn: 'parroquiaid', // Ahora depende de la parroquia seleccionada
+        optionsFilter: filterHorarios
       },
       {
         name: 'persona_nombre',
@@ -217,7 +261,7 @@ const Reservacion = () => {
     ];
 
     return baseFields;
-  }, [modalMode, personasOptions, horarios]);
+  }, [modalMode, personasOptions, horarios, parroquias]);
 
   const validate = (v) => {
     // Validar fecha: no permitir fechas pasadas
@@ -228,6 +272,7 @@ const Reservacion = () => {
       }
     }
 
+    if (!v.parroquiaid) return 'Seleccione una parroquia';
     if (!v.horarioid) return 'Seleccione un horario';
     if (!v.res_descripcion?.trim()) return 'Ingrese la descripción';
     return '';

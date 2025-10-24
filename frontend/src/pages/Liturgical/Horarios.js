@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Calendar as BigCalendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -112,7 +112,7 @@ const Horarios = () => {
   };
 
   // Componente personalizado para mostrar el evento en el calendario
-  const EventComponent = ({ event }) => (
+  const EventComponent = useCallback(({ event }) => (
     <div className="overflow-hidden">
       <div className="font-medium text-sm truncate">{event.title}</div>
       <div className="text-xs opacity-90 flex items-center gap-1">
@@ -125,38 +125,10 @@ const Horarios = () => {
         </div>
       )}
     </div>
-  );
+  ), []);
 
-  // Manejador para crear nueva reserva al seleccionar un slot vacío
-  const handleSelectSlot = ({ start, end }) => {
-    // Validar que start y end existan
-    if (!start || !end) {
-      return;
-    }
-    
-    try {
-      // Validar que la fecha no sea anterior a hoy (sin mostrar alert)
-      const today = startOfDay(new Date());
-      const selectedDate = startOfDay(start);
-      
-      if (isBefore(selectedDate, today)) {
-        return; // Simplemente no hacer nada
-      }
-      
-      const dateStr = format(start, 'yyyy-MM-dd');
-      const timeStr = format(start, 'HH:mm');
-      
-      // Guardar datos y mostrar confirmación
-      setPendingReservation({ dateStr, timeStr, horarioid: null });
-      setConfirmOpen(true);
-    } catch (error) {
-      console.error('Error en handleSelectSlot:', error);
-      // No hacer nada si hay error
-    }
-  };
-  
   // Confirmar creación de reserva
-  const confirmReservation = () => {
+  const confirmReservation = useCallback(() => {
     if (pendingReservation) {
       const { dateStr, timeStr, horarioid } = pendingReservation;
       if (horarioid) {
@@ -167,28 +139,66 @@ const Horarios = () => {
     }
     setConfirmOpen(false);
     setPendingReservation(null);
-  };
+  }, [pendingReservation, navigate]);
+
+  // Manejador para crear nueva reserva al seleccionar un slot vacío
+  const handleSelectSlot = useCallback(({ start, end }) => {
+    // Validar que start y end existan y sean objetos Date válidos
+    if (!start || !end || !(start instanceof Date) || !(end instanceof Date) || isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return;
+    }
+
+    // Evitar múltiples diálogos si ya hay uno abierto
+    if (confirmOpen) {
+      return;
+    }
+
+    try {
+      // Validar que la fecha no sea anterior a hoy (sin mostrar alert)
+      const today = startOfDay(new Date());
+      const selectedDate = startOfDay(start);
+
+      if (isBefore(selectedDate, today)) {
+        return; // Simplemente no hacer nada
+      }
+
+      const dateStr = format(start, 'yyyy-MM-dd');
+      const timeStr = format(start, 'HH:mm');
+
+      // Guardar datos y mostrar confirmación
+      setPendingReservation({ dateStr, timeStr, horarioid: null });
+      setConfirmOpen(true);
+    } catch (error) {
+      console.error('Error en handleSelectSlot:', error);
+      // No hacer nada si hay error
+    }
+  }, [confirmOpen]);
 
   // Manejador para redirigir a reservas al hacer click en un evento
-  const handleSelectEvent = async (event) => {
-    // Validar que el evento exista
+  const handleSelectEvent = useCallback((event) => {
+    // Validar que el evento exista y tenga id
     if (!event || !event.id) {
       return;
     }
-    
+
+    // Evitar múltiples diálogos si ya hay uno abierto
+    if (confirmOpen) {
+      return;
+    }
+
     try {
       // Buscar el evento completo en items usando el horarioid
       const fullEvent = items.find(item => item.horarioid === event.id);
-      
+
       if (fullEvent && fullEvent.date) {
         // Validar que la fecha no sea anterior a hoy (sin mostrar alert)
         const today = startOfDay(new Date());
         const eventDate = startOfDay(new Date(fullEvent.date));
-        
+
         if (isBefore(eventDate, today)) {
           return; // Simplemente no hacer nada
         }
-        
+
         // Guardar datos y mostrar confirmación
         setPendingReservation({
           dateStr: fullEvent.date,
@@ -201,7 +211,7 @@ const Horarios = () => {
       console.error('Error al abrir detalle del evento:', err);
       // No hacer nada si hay error
     }
-  };
+  }, [confirmOpen, items]);
 
   // Estado de carga
   if (loading) {
@@ -271,7 +281,7 @@ const Horarios = () => {
         icon={Clock}
       >
         <motion.button
-          onClick={() => navigate('/liturgico/gestionar?from=calendar')}
+          onClick={() => navigate('/liturgico/reservas?from=calendar')}
           className="text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110 shadow-lg"
           style={{ 
             background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' 
@@ -279,8 +289,8 @@ const Horarios = () => {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
         >
-          <Plus className="w-5 h-5" />
-          Nuevo Acto Litúrgico
+          <Calendar className="w-5 h-5" />
+          Realizar Reserva
         </motion.button>
       </PageHeader>
 
@@ -311,10 +321,10 @@ const Horarios = () => {
                   No hay actos litúrgicos programados
                 </h3>
                 <p className="text-gray-500 mb-6">
-                  No hay Horarios programados en el rango visible. Comienza agregando tu primer acto litúrgico.
+                  No hay horarios programados en el rango visible. Realiza tu primera reserva para comenzar.
                 </p>
                 <motion.button
-                  onClick={() => navigate('/liturgico/gestionar?from=calendar')}
+                  onClick={() => navigate('/liturgico/reservas?from=calendar')}
                   className="text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 mx-auto transition-all hover:brightness-110 shadow-md"
                   style={{ 
                     background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' 
@@ -322,8 +332,8 @@ const Horarios = () => {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
-                  <Plus className="w-5 h-5" />
-                  Programar Primer Acto Litúrgico
+                  <Calendar className="w-5 h-5" />
+                  Realizar Primera Reserva
                 </motion.button>
               </div>
             </div>
