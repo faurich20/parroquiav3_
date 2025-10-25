@@ -84,7 +84,7 @@ def login():
         db.session.add(new_refresh_token)
         db.session.commit()
         
-        print("✅ Login exitoso - Tokens creados")
+        print(" Login exitoso - Tokens creados")
         return jsonify({
             'message': 'Login exitoso',
             'access_token': access_token,
@@ -93,7 +93,7 @@ def login():
         }), 200
         
     except Exception as e:
-        print(f"❌ Error en login: {str(e)}")
+        print(f" Error en login: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': 'Error interno del servidor'}), 500
     
@@ -251,9 +251,19 @@ def register():
             'message': 'Usuario registrado exitosamente',
             'user': new_user.to_dict()
         }), 201
-        
+
     except Exception as e:
         print(f"❌ Error en registro: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': 'Error al registrar usuario'}), 500
+
+
+@auth_bp.route('/test', methods=['GET'])
+def test_auth():
+    """Endpoint de test para verificar que auth funciona"""
+    return jsonify({
+        'message': 'Auth blueprint funcionando',
+        'status': 'ok',
+        'timestamp': datetime.now().isoformat()
+    }), 200
 

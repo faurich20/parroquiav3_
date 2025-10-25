@@ -266,12 +266,13 @@ class Reserva(db.Model):
     personaid = db.Column(db.Integer, db.ForeignKey('persona.personaid'))
     res_persona_nombre = db.Column(db.String(255))  # Nombre de persona no registrada
     res_descripcion = db.Column(db.Text, nullable=False)
-    res_estado = db.Column(db.Boolean, default=False)  # true: Cancelado, false: Sin pagar
+    pagoid = db.Column(db.Integer, db.ForeignKey('pago.pagoid', ondelete='SET NULL'), nullable=True)  # FK a tabla pago
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     horario = db.relationship('Horario', back_populates='reservas')
     persona = db.relationship('Persona', back_populates='reservas')
+    pago = db.relationship('Pago', back_populates='reservas')
 
     def to_dict(self):
         # Determinar el nombre de la persona (registrada o no registrada)
@@ -281,7 +282,12 @@ class Reserva(db.Model):
             persona_nombre = self.res_persona_nombre
         else:
             persona_nombre = None
-            
+
+        # Obtener estado del pago relacionado
+        pago_estado = 'pendiente'  # Por defecto si no hay pago
+        if self.pago:
+            pago_estado = self.pago.pago_estado
+
         return {
             'reservaid': self.reservaid,
             'horarioid': self.horarioid,
@@ -289,8 +295,9 @@ class Reserva(db.Model):
             'persona_nombre': persona_nombre,
             'res_persona_nombre': self.res_persona_nombre,
             'res_descripcion': self.res_descripcion,
-            'res_estado': self.res_estado,  # true = Cancelado, false = Sin pagar
-            'estado_texto': 'Cancelado' if self.res_estado else 'Sin pagar',
+            'pagoid': self.pagoid,
+            'pago_estado': pago_estado,
+            'estado_texto': pago_estado.capitalize(),
             'h_fecha': self.horario.h_fecha.isoformat() if self.horario and self.horario.h_fecha else None,
             'h_hora': self.horario.h_hora.strftime('%H:%M') if self.horario and self.horario.h_hora else None,
             'acto_nombre': self.horario.acto_liturgico.act_nombre if self.horario and self.horario.acto_liturgico else None,
@@ -300,6 +307,45 @@ class Reserva(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+
+class Pago(db.Model):
+    __tablename__ = 'pago'
+
+    pagoid = db.Column(db.Integer, primary_key=True)
+    pago_medio = db.Column(db.String(15), nullable=False)
+    pago_monto = db.Column(db.Numeric(10, 2), nullable=False)
+    pago_estado = db.Column(db.String(15), nullable=False, default='pendiente')
+    pago_descripcion = db.Column(db.Text)
+    pago_fecha = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    pago_confirmado = db.Column(db.DateTime)
+    pago_expira = db.Column(db.DateTime)
+    pago_tarjeta_ultimos = db.Column(db.String(4))
+    pago_tarjeta_tipo = db.Column(db.String(20))
+    pago_qr_data = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    reservas = db.relationship('Reserva', back_populates='pago')
+
+    def to_dict(self):
+        return {
+            'pagoid': self.pagoid,
+            'pago_medio': self.pago_medio,
+            'pago_monto': float(self.pago_monto) if self.pago_monto else None,
+            'pago_estado': self.pago_estado,
+            'pago_descripcion': self.pago_descripcion,
+            'pago_fecha': self.pago_fecha.isoformat() if self.pago_fecha else None,
+            'pago_confirmado': self.pago_confirmado.isoformat() if self.pago_confirmado else None,
+            'pago_expira': self.pago_expira.isoformat() if self.pago_expira else None,
+            'pago_tarjeta_ultimos': self.pago_tarjeta_ultimos,
+            'pago_tarjeta_tipo': self.pago_tarjeta_tipo,
+            'pago_qr_data': self.pago_qr_data,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
 class LiturgicalAct(db.Model):
     __tablename__ = 'liturgical_act'
 

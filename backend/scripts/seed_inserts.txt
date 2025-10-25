@@ -1,5 +1,5 @@
 -- Seed Inserts for core tables - CORREGIDO
--- Tables: roles, users, departamento, provincia, distrito, parroquia, persona, actoliturgico, horario, reserva
+-- Tables: roles, users, departamento, provincia, distrito, parroquia, persona, actoliturgico, horario, reserva, pago
 -- Nota: password_hash usa bcrypt para la contraseña 'Admin123!'. Si tu hashing difiere, reemplaza el hash.
 
 BEGIN;
@@ -331,8 +331,8 @@ ON CONFLICT DO NOTHING;
 -- =========================================================
 
 -- Reservas con personas REGISTRADAS (tienen personaid)
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, res_estado, created_at, updated_at)
-SELECT h.horarioid, per.personaid, NULL, 'Reserva para bautismo familiar', FALSE, NOW(), NOW()
+INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
+SELECT h.horarioid, per.personaid, NULL, 'Reserva para bautismo familiar', NOW(), NOW()
 FROM public.horario h
 JOIN public.persona per ON per.per_nombres = 'Ana' AND per.per_apellidos = 'García'
 JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
@@ -340,8 +340,8 @@ WHERE a.act_nombre = 'bautismo' AND h.h_fecha = CURRENT_DATE + INTERVAL '1 day'
 LIMIT 1
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, res_estado, created_at, updated_at)
-SELECT h.horarioid, per.personaid, NULL, 'Ceremonia matrimonial especial', FALSE, NOW(), NOW()
+INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
+SELECT h.horarioid, per.personaid, NULL, 'Ceremonia matrimonial especial', NOW(), NOW()
 FROM public.horario h
 JOIN public.persona per ON per.per_nombres = 'Carlos' AND per.per_apellidos = 'Rodríguez'
 JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
@@ -349,8 +349,8 @@ WHERE a.act_nombre = 'matrimonio' AND h.h_fecha = CURRENT_DATE + INTERVAL '3 day
 LIMIT 1
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, res_estado, created_at, updated_at)
-SELECT h.horarioid, per.personaid, NULL, 'Misa familiar dominical', FALSE, NOW(), NOW()
+INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
+SELECT h.horarioid, per.personaid, NULL, 'Misa familiar dominical', NOW(), NOW()
 FROM public.horario h
 JOIN public.persona per ON per.per_nombres = 'María' AND per.per_apellidos = 'Pérez'
 JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
@@ -358,8 +358,8 @@ WHERE a.act_nombre = 'misa' AND h.h_fecha = CURRENT_DATE + INTERVAL '1 day' AND 
 LIMIT 1
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, res_estado, created_at, updated_at)
-SELECT h.horarioid, per.personaid, NULL, 'Reserva para servicio funerario', TRUE, NOW(), NOW()
+INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
+SELECT h.horarioid, per.personaid, NULL, 'Reserva para servicio funerario', NOW(), NOW()
 FROM public.horario h
 JOIN public.persona per ON per.per_nombres = 'Juan' AND per.per_apellidos = 'López'
 JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
@@ -367,8 +367,8 @@ WHERE a.act_nombre = 'exequias' AND h.h_fecha = CURRENT_DATE + INTERVAL '4 day'
 LIMIT 1
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, res_estado, created_at, updated_at)
-SELECT h.horarioid, per.personaid, NULL, 'Misa vespertina para jóvenes', FALSE, NOW(), NOW()
+INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
+SELECT h.horarioid, per.personaid, NULL, 'Misa vespertina para jóvenes', NOW(), NOW()
 FROM public.horario h
 JOIN public.persona per ON per.per_nombres = 'Jose Juan' AND per.per_apellidos = 'Pérez López'
 JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
@@ -377,20 +377,72 @@ LIMIT 1
 ON CONFLICT DO NOTHING;
 
 -- Reservas con personas NO REGISTRADAS (sin personaid, solo nombre)
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, res_estado, created_at, updated_at)
-SELECT h.horarioid, NULL, 'Pedro Martínez', 'Reserva para confirmación', FALSE, NOW(), NOW()
+INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
+SELECT h.horarioid, NULL, 'Pedro Martínez', 'Reserva para confirmación', NOW(), NOW()
 FROM public.horario h
 JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
 WHERE a.act_nombre = 'confirmacion' AND h.h_fecha = CURRENT_DATE + INTERVAL '11 day'
 LIMIT 1
 ON CONFLICT DO NOTHING;
 
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, res_estado, created_at, updated_at)
-SELECT h.horarioid, NULL, 'Lucía Fernández', 'Primera comunión de mi hija', FALSE, NOW(), NOW()
+INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
+SELECT h.horarioid, NULL, 'Lucía Fernández', 'Primera comunión de mi hija', NOW(), NOW()
 FROM public.horario h
 JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
 WHERE a.act_nombre = 'comunion' AND h.h_fecha = CURRENT_DATE + INTERVAL '14 day'
 LIMIT 1
 ON CONFLICT DO NOTHING;
+
+-- =========================================================
+-- PAGOS (vinculados a reservas mediante pagoid)
+-- =========================================================
+
+INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
+SELECT 'Yape o Plin', 50.00, 'pagado', 'Reserva para bautismo familiar', NOW(), NOW() + INTERVAL '2 day', NULL, NULL, 'QR-BAUTISMO'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Reserva para bautismo familiar'
+);
+
+INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
+SELECT 'Tarjeta', 250.00, 'pendiente', 'Ceremonia matrimonial especial', NULL, NOW() + INTERVAL '3 day', '4242', 'VISA', NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Ceremonia matrimonial especial'
+);
+
+INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
+SELECT 'Efectivo', 120.00, 'pagado', 'Reserva para servicio funerario', NOW(), NOW() + INTERVAL '1 day', NULL, NULL, NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Reserva para servicio funerario'
+);
+
+INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
+SELECT 'Efectivo', 25.00, 'pendiente', 'Misa familiar dominical', NULL, NOW() + INTERVAL '1 day', NULL, NULL, NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Misa familiar dominical'
+);
+
+INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
+SELECT 'Yape o Plin', 30.00, 'pagado', 'Misa vespertina para jóvenes', NOW(), NOW() + INTERVAL '2 day', NULL, NULL, 'QR-MISA-JOVENES'
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Misa vespertina para jóvenes'
+);
+
+INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
+SELECT 'Tarjeta', 75.00, 'pendiente', 'Reserva para confirmación', NULL, NOW() + INTERVAL '5 day', '1234', 'MASTERCARD', NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Reserva para confirmación'
+);
+
+INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
+SELECT 'Efectivo', 100.00, 'pagado', 'Primera comunión de mi hija', NOW(), NOW() + INTERVAL '7 day', NULL, NULL, NULL
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Primera comunión de mi hija'
+);
+
+UPDATE public.reserva r
+SET pagoid = pg.pagoid
+FROM public.pago pg
+WHERE r.res_descripcion = pg.pago_descripcion
+  AND r.pagoid IS DISTINCT FROM pg.pagoid;
 
 COMMIT;

@@ -493,6 +493,10 @@ export const AuthProvider = ({ children }) => {
   const authFetch = useCallback(async (url, options = {}) => {
     let token = localStorage.getItem('access_token');
 
+    console.log('🌐 [AUTHFETCH] Request iniciado:');
+    console.log('🌐 [AUTHFETCH] URL:', url);
+    console.log('🌐 [AUTHFETCH] Token presente:', !!token);
+
     const config = {
       ...options,
       headers: {
@@ -502,19 +506,24 @@ export const AuthProvider = ({ children }) => {
       },
     };
 
+    console.log('🌐 [AUTHFETCH] Headers finales:', config.headers);
+
     let response = await fetch(url, config);
+    console.log('🌐 [AUTHFETCH] Respuesta inicial:', response.status, response.statusText);
 
     // Si el token expiró (401), intentar refresh UNA VEZ
     if (response.status === 401) {
-      console.log('🔄 Token expirado, intentando refresh...');
-      
+      console.log('🔄 [AUTHFETCH] Token expirado, intentando refresh...');
+
       const refreshed = await refreshToken();
-      
+
       if (refreshed) {
         // Reintentar request con nuevo token
         token = localStorage.getItem('access_token');
         config.headers.Authorization = `Bearer ${token}`;
+        console.log('🔄 [AUTHFETCH] Reintentando con nuevo token...');
         response = await fetch(url, config);
+        console.log('🔄 [AUTHFETCH] Respuesta después de refresh:', response.status, response.statusText);
       }
     }
 

@@ -42,12 +42,20 @@ const ModalCrudGenerico = ({
       // Crear objeto con valores iniciales solo si no hay valores existentes
       const newValues = {};
       fields.forEach(field => {
-        const initialValue = initialValues[field.name];
-        const defaultValue = field.defaultValue;
+        let initialValue;
 
-        // Prioridad: initialValue > defaultValue > ''
-        newValues[field.name] = initialValue !== undefined ? initialValue :
-                               (defaultValue !== undefined ? defaultValue : '');
+        // Si el campo tiene getInitialValue, usarlo
+        if (typeof field.getInitialValue === 'function') {
+          initialValue = field.getInitialValue();
+        } else {
+          // Fallback a la lógica anterior
+          initialValue = initialValues[field.name];
+          if (initialValue === undefined) {
+            initialValue = field.defaultValue !== undefined ? field.defaultValue : '';
+          }
+        }
+
+        newValues[field.name] = initialValue;
       });
 
       setValues(newValues);
@@ -179,30 +187,59 @@ const ModalCrudGenerico = ({
           </div>
         );
       case 'select':
-        // Si el campo depende de otro, filtrar las opciones dinámicamente
         let selectOptions = campo.options || [];
         if (campo.dependsOn && campo.optionsFilter && typeof campo.optionsFilter === 'function') {
-          const dependValue = values[campo.dependsOn];
-          const filteredOptions = campo.optionsFilter(dependValue, values);
-          selectOptions = [{ value: '', label: campo.placeholder || 'Seleccione una opción' }, ...filteredOptions];
+          const dependsOnArray = Array.isArray(campo.dependsOn) ? campo.dependsOn : [campo.dependsOn];
+          const dependValues = dependsOnArray.reduce((acc, dep) => {
+            acc[dep] = (current || {})[dep];
+            return acc;
+          }, {});
+
+          const hasAllDependencies = dependsOnArray.every(dep => dependValues[dep]);
+          if (hasAllDependencies) {
+            const filteredOptions = campo.optionsFilter(dependValues[dependsOnArray[0]], current || {});
+            selectOptions = [{ value: '', label: campo.placeholder || 'Seleccione una opción' }, ...filteredOptions];
+          }
         }
-        
+
         return (
           <div key={campo.name}>
             <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
             <select
               value={value || ''}
               onChange={(e) => {
-                setValue(e.target.value);
-                // Limpiar campos que dependen de otros campos cuando cambie cualquier valor
+                const newValue = e.target.value;
+                setValue(newValue);
+
+                // *** CRÍTICO: Actualizar current también para que se refleje en dependencias ***
+                if (campo.name === 'parroquiaid' || campo.name === 'h_fecha') {
+                  setValues(prev => {
+                    const updated = { ...prev, [campo.name]: newValue };
+                    // Limpiar horarioid cuando cambie parroquia o fecha
+                    if (campo.name === 'parroquiaid' || campo.name === 'h_fecha') {
+                      updated.horarioid = '';
+                    }
+                    return updated;
+                  });
+                }
+
+                // Limpiar campos dependientes
                 fields.forEach(f => {
-                  if (f.dependsOn && values[f.dependsOn]) {
-                    // Si el campo depende de otro y ese otro tiene valor, limpiar este campo
-                    setValues(prev => ({ ...prev, [f.name]: '' }));
+                  if (f.dependsOn) {
+                    const fieldDependsOnArray = Array.isArray(f.dependsOn) ? f.dependsOn : [f.dependsOn];
+                    const dependsOnChangedField = fieldDependsOnArray.some(dep => dep === campo.name);
+                    if (dependsOnChangedField) {
+                      setValues(prev => ({ ...prev, [f.name]: '' }));
+                    }
                   }
                 });
+
+                setRenderTrigger(prev => prev + 1); // Forzar re-render
               }}
-              disabled={disabled || (campo.dependsOn && !values[campo.dependsOn])}
+              disabled={disabled || (campo.dependsOn && (() => {
+                const dependsOnArray = Array.isArray(campo.dependsOn) ? campo.dependsOn : [campo.dependsOn];
+                return !dependsOnArray.every(dep => (current || {})[dep]);
+              })())}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
             >
               {selectOptions.map((opt) => (

@@ -91,6 +91,8 @@ def create_app():
                 msg += f"📋 Query Params: {dict(request.args)}\n"
             if request.get_json(silent=True):
                 msg += f"📦 JSON Body: {request.get_json(silent=True)}\n"
+            if request.headers.get('Authorization'):
+                msg += f"🔐 Auth Header: {request.headers.get('Authorization')[:50]}...\n"
             msg += f"{'='*60}\n"
             sys.stdout.write(msg)
             sys.stdout.flush()
@@ -144,6 +146,7 @@ def create_app():
             pass
     
     # Registrar blueprints
+    print("🔄 [INIT] Registrando blueprints...")
     from app.routes.auth import auth_bp
     from app.routes.users import users_bp  # ✅ Importar el blueprint de usuarios
     from app.routes.roles import roles_bp  # ✅ Importar el blueprint de roles
@@ -152,7 +155,20 @@ def create_app():
     from app.routes.parroquias import parroquias_bp
     from app.routes.personas import personas_bp
     from app.routes.liturgical import liturgical_bp
-    
+
+    print("✅ [INIT] Blueprints importados correctamente")
+
+    try:
+        from app.routes.pagos import pagos_bp  # ✅ Importar el blueprint de pagos
+        print("✅ [INIT] Blueprint pagos importado exitosamente")
+    except Exception as e:
+        print(f"❌ [INIT] Error importando blueprint pagos: {str(e)}")
+        import traceback
+        print(f"❌ [INIT] Traceback: {traceback.format_exc()}")
+        pagos_bp = None
+
+    print("✅ [INIT] Blueprints importados correctamente")
+
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(users_bp, url_prefix='/api/users')  # ✅ Registrar blueprint
     app.register_blueprint(roles_bp, url_prefix='/api/roles')  # ✅ Registrar blueprint de roles
@@ -162,6 +178,14 @@ def create_app():
     app.register_blueprint(personas_bp, url_prefix='/api/personas')
     app.register_blueprint(liturgical_bp, url_prefix='/api/liturgical')
 
+    if pagos_bp:
+        app.register_blueprint(pagos_bp, url_prefix='/api/pagos')  # ✅ Registrar blueprint de pagos
+        print("✅ [INIT] Blueprint pagos registrado exitosamente")
+    else:
+        print("❌ [INIT] Blueprint pagos NO registrado - hubo error en importación")
+
+    print("✅ [INIT] Todos los blueprints registrados")
+
     # Crear tablas si no existen (útil en desarrollo)
     with app.app_context():
         try:
@@ -169,7 +193,7 @@ def create_app():
         except Exception:
             pass
         try:
-            from app.models import User, Role, Provincia, Distrito, Departamento, Parroquia, Persona
+            from app.models import User, Role, Provincia, Distrito, Departamento, Parroquia, Persona, Pago
             if User.query.count() == 0:
                 admin_role = Role.query.filter_by(name='Admin').first()
                 if not admin_role:

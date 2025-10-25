@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import text
 from app import db
 from app.models import ActoLiturgico, Horario, Reserva
@@ -592,9 +592,9 @@ def list_reservas():
                 r.reservaid,
                 r.horarioid,
                 r.personaid,
+                r.pagoid,
                 r.res_persona_nombre,
                 r.res_descripcion,
-                r.res_estado,
                 r.created_at,
                 r.updated_at,
                 h.h_fecha,
@@ -605,12 +605,16 @@ def list_reservas():
                 COALESCE(
                     per.per_nombres || ' ' || per.per_apellidos,
                     r.res_persona_nombre
-                ) as persona_nombre
+                ) as persona_nombre,
+                -- Estado del pago: si pagoid es NULL → 'pendiente', sino pago_estado
+                COALESCE(pg.pago_estado, 'pendiente') as pago_estado,
+                COALESCE(pg.pago_estado, 'pendiente') as estado_texto
             FROM public.reserva r
             LEFT JOIN public.horario h ON r.horarioid = h.horarioid
             LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
             LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
             LEFT JOIN public.persona per ON r.personaid = per.personaid
+            LEFT JOIN public.pago pg ON r.pagoid = pg.pagoid
             ORDER BY r.created_at DESC
         """)).fetchall()
 
@@ -621,11 +625,12 @@ def list_reservas():
                 'id': row.reservaid,  # Agregar alias 'id' para compatibilidad
                 'horarioid': row.horarioid,
                 'personaid': row.personaid,
+                'pagoid': row.pagoid,
                 'res_persona_nombre': row.res_persona_nombre,
                 'persona_nombre': row.persona_nombre,
                 'res_descripcion': row.res_descripcion,
-                'res_estado': row.res_estado,  # true = Cancelado, false = Sin pagar
-                'estado_texto': 'Cancelado' if row.res_estado else 'Sin pagar',
+                'pago_estado': row.pago_estado,  # Estado del pago desde tabla pago
+                'estado_texto': row.estado_texto.capitalize() if row.estado_texto else 'Pendiente',
                 'h_fecha': row.h_fecha.isoformat() if row.h_fecha else None,
                 'h_hora': row.h_hora.strftime('%H:%M') if row.h_hora else None,
                 'acto_nombre': row.act_nombre,
@@ -671,27 +676,56 @@ def create_reserva():
             if persona_existente:
                 personaid = persona_existente.personaid
         
-        # Convertir res_estado correctamente (puede venir como string 'true'/'false' o booleano)
-        res_estado_value = data.get('res_estado', False)
-        if isinstance(res_estado_value, str):
-            res_estado_value = res_estado_value.lower() in ('true', '1', 'yes')
-        else:
-            res_estado_value = bool(res_estado_value)
-        
+        # No manejar res_estado aquí - se obtiene dinámicamente de tabla pago
+
+        # Si hay datos de pago, crear pago primero y luego reserva con pagoid
+        pagoid = data.get('pagoid')
+        pago_data = None
+
+        # Si vienen datos de pago en la request, crear el pago primero
+        if any(key in data for key in ['pago_medio', 'pago_monto', 'pago_descripcion', 'pago_fecha']):
+            try:
+                # Crear pago
+                from app.models import Pago
+                from datetime import datetime
+
+                pago = Pago(
+                    pago_medio=data.get('pago_medio'),
+                    pago_monto=float(data.get('pago_monto')),
+                    pago_estado=data.get('pago_estado', 'pagado'),
+                    pago_descripcion=data.get('pago_descripcion', ''),
+                    pago_fecha=datetime.fromisoformat(data.get('pago_fecha', datetime.now().isoformat()).replace('Z', '+00:00')),
+                    pago_confirmado=datetime.fromisoformat(data.get('pago_fecha', datetime.now().isoformat()).replace('Z', '+00:00')),
+                    pago_expira=datetime.fromisoformat(data.get('pago_fecha', datetime.now().isoformat()).replace('Z', '+00:00')) + timedelta(hours=24)  # Expira en 24 horas
+                )
+                db.session.add(pago)
+                db.session.flush()  # Para obtener el pagoid
+                pagoid = pago.pagoid
+                pago_data = pago
+
+                print(f"✅ [BACKEND] Pago creado con ID: {pagoid}")
+
+            except Exception as e:
+                print(f"❌ [BACKEND] Error creando pago: {str(e)}")
+                db.session.rollback()
+                return jsonify({'error': 'Error creando pago'}), 500
+
         result = db.session.execute(text("""
-            INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, res_estado)
-            VALUES (:horarioid, :personaid, :res_persona_nombre, :res_descripcion, :res_estado)
+            INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, pagoid)
+            VALUES (:horarioid, :personaid, :res_persona_nombre, :res_descripcion, :pagoid)
             RETURNING reservaid, created_at, updated_at
         """), {
             'horarioid': data.get('horarioid'),
             'personaid': personaid,
             'res_persona_nombre': persona_nombre if not personaid else None,  # Solo guardar si no hay personaid
             'res_descripcion': (data.get('res_descripcion') or '').strip(),
-            'res_estado': res_estado_value
+            'pagoid': pagoid
         })
 
         db.session.commit()
         new_id = result.fetchone()
+
+        print(f"✅ [BACKEND] Reserva creada con ID: {new_id.reservaid}")
 
         # Obtener la reserva creada completa
         reserva = db.session.execute(text("""
@@ -699,9 +733,9 @@ def create_reserva():
                 r.reservaid,
                 r.horarioid,
                 r.personaid,
+                r.pagoid,
                 r.res_persona_nombre,
                 r.res_descripcion,
-                r.res_estado,
                 r.created_at,
                 r.updated_at,
                 h.h_fecha,
@@ -712,25 +746,45 @@ def create_reserva():
                 COALESCE(
                     per.per_nombres || ' ' || per.per_apellidos,
                     r.res_persona_nombre
-                ) as persona_nombre
+                ) as persona_nombre,
+                -- Estado del pago: si pagoid es NULL → 'pendiente', sino pago_estado
+                COALESCE(pg.pago_estado, 'pendiente') as pago_estado,
+                COALESCE(pg.pago_estado, 'pendiente') as estado_texto
             FROM public.reserva r
             LEFT JOIN public.horario h ON r.horarioid = h.horarioid
             LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
             LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
             LEFT JOIN public.persona per ON r.personaid = per.personaid
+            LEFT JOIN public.pago pg ON r.pagoid = pg.pagoid
             WHERE r.reservaid = :id
         """), {'id': new_id.reservaid}).fetchone()
+
+        # Si también se creó un pago, incluir sus datos en la respuesta
+        pago_info = None
+        if pago_data:
+            pago_info = {
+                'pagoid': pago_data.pagoid,
+                'pago_medio': pago_data.pago_medio,
+                'pago_monto': float(pago_data.pago_monto),
+                'pago_estado': pago_data.pago_estado,
+                'pago_descripcion': pago_data.pago_descripcion,
+                'pago_fecha': pago_data.pago_fecha.isoformat(),
+                'pago_confirmado': pago_data.pago_confirmado.isoformat() if pago_data.pago_confirmado else None,
+                'created_at': pago_data.created_at.isoformat()
+            }
+            print(f"✅ [BACKEND] Pago incluido en respuesta: {pago_info}")
 
         return jsonify({
             'item': {
                 'reservaid': reserva.reservaid,
                 'horarioid': reserva.horarioid,
                 'personaid': reserva.personaid,
+                'pagoid': reserva.pagoid,
                 'res_persona_nombre': reserva.res_persona_nombre,
                 'persona_nombre': reserva.persona_nombre,
                 'res_descripcion': reserva.res_descripcion,
-                'res_estado': reserva.res_estado,
-                'estado_texto': 'Cancelado' if reserva.res_estado else 'Sin pagar',
+                'pago_estado': reserva.pago_estado,
+                'estado_texto': reserva.estado_texto.capitalize() if reserva.estado_texto else 'Pendiente',
                 'h_fecha': reserva.h_fecha.isoformat() if reserva.h_fecha else None,
                 'h_hora': reserva.h_hora.strftime('%H:%M') if reserva.h_hora else None,
                 'acto_nombre': reserva.act_nombre,
@@ -738,7 +792,8 @@ def create_reserva():
                 'parroquia_nombre': reserva.parroquia_nombre,
                 'created_at': reserva.created_at.isoformat() if reserva.created_at else None,
                 'updated_at': reserva.updated_at.isoformat() if reserva.updated_at else None
-            }
+            },
+            'pago': pago_info
         }), 201
 
     except Exception as e:
@@ -769,12 +824,7 @@ def update_reserva(reservaid):
             if persona_existente:
                 personaid = persona_existente.personaid
         
-        # Convertir res_estado correctamente (puede venir como string 'true'/'false' o booleano)
-        res_estado_value = data.get('res_estado', False)
-        if isinstance(res_estado_value, str):
-            res_estado_value = res_estado_value.lower() in ('true', '1', 'yes')
-        else:
-            res_estado_value = bool(res_estado_value)
+        # No manejar res_estado aquí - se obtiene dinámicamente de tabla pago
         
         result = db.session.execute(text("""
             UPDATE public.reserva
@@ -782,7 +832,6 @@ def update_reserva(reservaid):
                 personaid = :personaid,
                 res_persona_nombre = :res_persona_nombre,
                 res_descripcion = :res_descripcion,
-                res_estado = :res_estado,
                 updated_at = NOW()
             WHERE reservaid = :id
             RETURNING reservaid
@@ -791,8 +840,7 @@ def update_reserva(reservaid):
             'horarioid': data.get('horarioid'),
             'personaid': personaid,
             'res_persona_nombre': persona_nombre if not personaid else None,
-            'res_descripcion': (data.get('res_descripcion') or '').strip(),
-            'res_estado': res_estado_value
+            'res_descripcion': (data.get('res_descripcion') or '').strip()
         })
         
         updated = result.fetchone()
@@ -807,9 +855,9 @@ def update_reserva(reservaid):
                 r.reservaid,
                 r.horarioid,
                 r.personaid,
+                r.pagoid,
                 r.res_persona_nombre,
                 r.res_descripcion,
-                r.res_estado,
                 r.created_at,
                 r.updated_at,
                 h.h_fecha,
@@ -820,12 +868,16 @@ def update_reserva(reservaid):
                 COALESCE(
                     per.per_nombres || ' ' || per.per_apellidos,
                     r.res_persona_nombre
-                ) as persona_nombre
+                ) as persona_nombre,
+                -- Estado del pago: si pagoid es NULL → 'pendiente', sino pago_estado
+                COALESCE(pg.pago_estado, 'pendiente') as pago_estado,
+                COALESCE(pg.pago_estado, 'pendiente') as estado_texto
             FROM public.reserva r
             LEFT JOIN public.horario h ON r.horarioid = h.horarioid
             LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
             LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
             LEFT JOIN public.persona per ON r.personaid = per.personaid
+            LEFT JOIN public.pago pg ON r.pagoid = pg.pagoid
             WHERE r.reservaid = :id
         """), {'id': reservaid}).fetchone()
         
@@ -836,11 +888,12 @@ def update_reserva(reservaid):
                 'id': reserva.reservaid,  # Alias para compatibilidad
                 'horarioid': reserva.horarioid,
                 'personaid': reserva.personaid,
+                'pagoid': reserva.pagoid,
                 'res_persona_nombre': reserva.res_persona_nombre,
                 'persona_nombre': reserva.persona_nombre,
                 'res_descripcion': reserva.res_descripcion,
-                'res_estado': reserva.res_estado,
-                'estado_texto': 'Cancelado' if reserva.res_estado else 'Sin pagar',
+                'pago_estado': reserva.pago_estado,
+                'estado_texto': reserva.estado_texto.capitalize() if reserva.estado_texto else 'Pendiente',
                 'h_fecha': reserva.h_fecha.isoformat() if reserva.h_fecha else None,
                 'h_hora': reserva.h_hora.strftime('%H:%M') if reserva.h_hora else None,
                 'acto_nombre': reserva.act_nombre,
@@ -897,13 +950,14 @@ def get_calendario():
                 a.act_titulo,
                 p.par_nombre as parroquia_nombre,
                 COUNT(r.reservaid) as reservas_count,
-                COUNT(CASE WHEN r.res_estado = FALSE THEN 1 END) as reservas_activas_count,
+                COUNT(CASE WHEN COALESCE(pg.pago_estado, 'pendiente') IN ('pendiente', 'pagado') THEN 1 END) as reservas_activas_count,
                 h.horarioid,
                 a.actoliturgicoid
             FROM public.horario h
             LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
             LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
             LEFT JOIN public.reserva r ON h.horarioid = r.horarioid
+            LEFT JOIN public.pago pg ON r.pagoid = pg.pagoid
             WHERE h.h_fecha >= CURRENT_DATE - INTERVAL '30 days'
               AND h.h_fecha < CURRENT_DATE + INTERVAL '60 days'
               AND a.act_estado = TRUE
@@ -948,11 +1002,12 @@ def get_horarios_by_date(date_str):
                 a.act_titulo,
                 p.par_nombre as parroquia_nombre,
                 COUNT(r.reservaid) as reservas_total,
-                COUNT(CASE WHEN r.res_estado = FALSE THEN 1 END) as reservas_activas
+                COUNT(CASE WHEN COALESCE(pg.pago_estado, 'pendiente') IN ('pendiente', 'pagado') THEN 1 END) as reservas_activas
             FROM public.horario h
             LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
             LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
             LEFT JOIN public.reserva r ON h.horarioid = r.horarioid
+            LEFT JOIN public.pago pg ON r.pagoid = pg.pagoid
             WHERE h.h_fecha = :fecha
             GROUP BY h.horarioid, h.h_fecha, h.h_hora, a.act_nombre, a.act_titulo, p.par_nombre
             ORDER BY h.h_hora
