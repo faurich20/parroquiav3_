@@ -211,6 +211,26 @@ const Reservacion = () => {
     loadHorarios();
   }, [loadHorarios]);
 
+  // Abrir modal automáticamente si viene desde el calendario con params
+  useEffect(() => {
+    const from = searchParams.get('from');
+    const date = searchParams.get('date');
+    const time = searchParams.get('time');
+    const horarioid = searchParams.get('horarioid');
+
+    if (from === 'calendar' && (date || time || horarioid)) {
+      // Prefijar valores iniciales
+      setCurrent(prev => ({
+        ...(prev || {}),
+        h_fecha: date || '',
+        h_hora: time || '',
+        horarioid: horarioid || ''
+      }));
+      setModalMode('add');
+      setModalOpen(true);
+    }
+  }, [searchParams]);
+
   // Cargar horarios cuando cambia parroquia / fecha en edición
   useEffect(() => {
     if (!modalOpen) return;

@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { DollarSign } from 'lucide-react';
 import PageHeader from '../components/Common/PageHeader';
 import Card from '../components/Common/Card';

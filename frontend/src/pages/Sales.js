@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { TrendingUp } from 'lucide-react';
 import PageHeader from '../components/Common/PageHeader';
 import Card from '../components/Common/Card';
