@@ -18,7 +18,7 @@ const ModalCrudGenerico = ({
   note,
   readOnlyContent,
 }) => {
-  const [renderTrigger, setRenderTrigger] = useState(0); // Para forzar re-renderización
+  const [renderTrigger, setRenderTrigger] = useState(0);
   const [values, setValues] = useState({});
   const [errores, setErrores] = useState('');
   const [cargando, setCargando] = useState(false);
@@ -29,26 +29,21 @@ const ModalCrudGenerico = ({
 
   useEffect(() => {
     if (isOpen) {
-      // Solo resetear valores si el modal se acaba de abrir o si no hay valores previos escritos
       const hasExistingValues = Object.values(values).some(val => val !== '' && val !== null && val !== undefined);
 
-      // Si ya hay valores escritos en el modal, no los resetear
       if (hasExistingValues) {
         setErrores('');
         setCargando(false);
         return;
       }
 
-      // Crear objeto con valores iniciales solo si no hay valores existentes
       const newValues = {};
       fields.forEach(field => {
         let initialValue;
 
-        // Si el campo tiene getInitialValue, usarlo
         if (typeof field.getInitialValue === 'function') {
           initialValue = field.getInitialValue();
         } else {
-          // Fallback a la lógica anterior
           initialValue = initialValues[field.name];
           if (initialValue === undefined) {
             initialValue = field.defaultValue !== undefined ? field.defaultValue : '';
@@ -62,7 +57,6 @@ const ModalCrudGenerico = ({
       setErrores('');
       setCargando(false);
     } else {
-      // Resetear cuando se cierra el modal
       setValues({});
       setErrores('');
       setCargando(false);
@@ -71,7 +65,6 @@ const ModalCrudGenerico = ({
 
   const footer = useMemo(() => {
     if (soloLectura) {
-      // En modo view con readOnlyContent, no mostrar footer (el botón está dentro del contenido)
       if (readOnlyContent) {
         return null;
       }
@@ -135,12 +128,15 @@ const ModalCrudGenerico = ({
     const value = values[campo.name];
     const setValue = (v) => {
       setValues(prev => ({ ...prev, [campo.name]: v }));
-      setRenderTrigger(prev => prev + 1); // Forzar re-renderización
+      setRenderTrigger(prev => prev + 1);
     };
     const disabled = soloLectura || campo.disabled;
 
+    // ✅ FIX: Agregar key única basada en el nombre del campo
+    const fieldKey = `field-${campo.name}-${mode}`;
+
     if (campo.type === 'custom' && typeof campo.render === 'function') {
-      return campo.render(value, setValue, values, disabled);
+      return <div key={fieldKey}>{campo.render(value, setValue, values, disabled)}</div>;
     }
 
     switch (campo.type) {
@@ -150,17 +146,15 @@ const ModalCrudGenerico = ({
       case 'date':
       case 'time':
         return (
-          <div key={campo.name}>
+          <div key={fieldKey}>
             <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
             <input
               type={campo.type}
               value={value || ''}
               onChange={(e) => {
                 setValue(e.target.value);
-                // Limpiar campos que dependen de otros campos cuando cambie cualquier valor
                 fields.forEach(f => {
                   if (f.dependsOn && values[f.dependsOn]) {
-                    // Si el campo depende de otro y ese otro tiene valor, limpiar este campo
                     setValues(prev => ({ ...prev, [f.name]: '' }));
                   }
                 });
@@ -174,7 +168,7 @@ const ModalCrudGenerico = ({
         );
       case 'textarea':
         return (
-          <div key={campo.name}>
+          <div key={fieldKey}>
             <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
             <textarea
               value={value || ''}
@@ -191,19 +185,19 @@ const ModalCrudGenerico = ({
         if (campo.dependsOn && campo.optionsFilter && typeof campo.optionsFilter === 'function') {
           const dependsOnArray = Array.isArray(campo.dependsOn) ? campo.dependsOn : [campo.dependsOn];
           const dependValues = dependsOnArray.reduce((acc, dep) => {
-            acc[dep] = (current || {})[dep];
+            acc[dep] = (values || {})[dep];
             return acc;
           }, {});
 
           const hasAllDependencies = dependsOnArray.every(dep => dependValues[dep]);
           if (hasAllDependencies) {
-            const filteredOptions = campo.optionsFilter(dependValues[dependsOnArray[0]], current || {});
+            const filteredOptions = campo.optionsFilter(dependValues[dependsOnArray[0]], values || {});
             selectOptions = [{ value: '', label: campo.placeholder || 'Seleccione una opción' }, ...filteredOptions];
           }
         }
 
         return (
-          <div key={campo.name}>
+          <div key={fieldKey}>
             <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
             <select
               value={value || ''}
@@ -211,11 +205,9 @@ const ModalCrudGenerico = ({
                 const newValue = e.target.value;
                 setValue(newValue);
 
-                // *** CRÍTICO: Actualizar current también para que se refleje en dependencias ***
                 if (campo.name === 'parroquiaid' || campo.name === 'h_fecha') {
                   setValues(prev => {
                     const updated = { ...prev, [campo.name]: newValue };
-                    // Limpiar horarioid cuando cambie parroquia o fecha
                     if (campo.name === 'parroquiaid' || campo.name === 'h_fecha') {
                       updated.horarioid = '';
                     }
@@ -223,7 +215,6 @@ const ModalCrudGenerico = ({
                   });
                 }
 
-                // Limpiar campos dependientes
                 fields.forEach(f => {
                   if (f.dependsOn) {
                     const fieldDependsOnArray = Array.isArray(f.dependsOn) ? f.dependsOn : [f.dependsOn];
@@ -234,11 +225,11 @@ const ModalCrudGenerico = ({
                   }
                 });
 
-                setRenderTrigger(prev => prev + 1); // Forzar re-render
+                setRenderTrigger(prev => prev + 1);
               }}
               disabled={disabled || (campo.dependsOn && (() => {
                 const dependsOnArray = Array.isArray(campo.dependsOn) ? campo.dependsOn : [campo.dependsOn];
-                return !dependsOnArray.every(dep => (current || {})[dep]);
+                return !dependsOnArray.every(dep => (values || {})[dep]);
               })())}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
             >
@@ -252,7 +243,7 @@ const ModalCrudGenerico = ({
         );
       case 'checkbox':
         return (
-          <label key={campo.name} className="flex items-center gap-2 text-sm">
+          <label key={fieldKey} className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={!!value}
@@ -265,7 +256,7 @@ const ModalCrudGenerico = ({
       case 'combobox':
         const listId = `${campo.name}-datalist`;
         return (
-          <div key={campo.name}>
+          <div key={fieldKey}>
             <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
             <input
               type="text"
@@ -309,6 +300,7 @@ const ModalCrudGenerico = ({
           <div className="space-y-4">{readOnlyContent(values)}</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* ✅ FIX: Ahora cada campo tiene su key única */}
             {fields.map((f) => renderCampo(f))}
           </div>
         )}

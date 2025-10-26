@@ -34,6 +34,7 @@ const Horarios = () => {
   const navigate = useNavigate();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingReservation, setPendingReservation] = useState(null);
+  const [noSchedulesOpen, setNoSchedulesOpen] = useState(false);
 
   // Recargar calendario cuando el usuario vuelve a estar autenticado
   useEffect(() => {
@@ -149,7 +150,7 @@ const Horarios = () => {
     }
 
     // Evitar múltiples diálogos si ya hay uno abierto
-    if (confirmOpen) {
+    if (confirmOpen || noSchedulesOpen) {
       return;
     }
 
@@ -165,6 +166,15 @@ const Horarios = () => {
       const dateStr = format(start, 'yyyy-MM-dd');
       const timeStr = format(start, 'HH:mm');
 
+      // Validar si existen horarios programados para ese día
+      const hasEventsForDay = events.some(evt => startOfDay(evt.start).getTime() === selectedDate.getTime());
+
+      if (!hasEventsForDay) {
+        // Mostrar aviso de que no hay horarios programados
+        setNoSchedulesOpen(true);
+        return;
+      }
+
       // Guardar datos y mostrar confirmación
       setPendingReservation({ dateStr, timeStr, horarioid: null });
       setConfirmOpen(true);
@@ -172,7 +182,7 @@ const Horarios = () => {
       console.error('Error en handleSelectSlot:', error);
       // No hacer nada si hay error
     }
-  }, [confirmOpen]);
+  }, [confirmOpen, noSchedulesOpen, events]);
 
   // Manejador para redirigir a reservas al hacer click en un evento
   const handleSelectEvent = useCallback((event) => {
@@ -442,6 +452,18 @@ const Horarios = () => {
         }}
         confirmText="Sí, crear reserva"
         cancelText="Cancelar"
+        isDanger={false}
+      />
+
+      {/* Diálogo de sin horarios programados */}
+      <DialogoConfirmacion
+        abierto={noSchedulesOpen}
+        titulo="Sin Horarios Programados"
+        mensaje="No hay horarios programados para esta fecha. Elija otra fecha."
+        onConfirmar={() => setNoSchedulesOpen(false)}
+        onCancelar={() => setNoSchedulesOpen(false)}
+        confirmText="Entendido"
+        cancelText="Cerrar"
         isDanger={false}
       />
     </div>

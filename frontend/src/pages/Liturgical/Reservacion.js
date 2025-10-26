@@ -1115,7 +1115,7 @@ const Reservacion = () => {
         label: 'Estado',
         type: 'custom',
         render: (value, setValue, allValues, disabled) => {
-          const estadoValue = modalMode === 'add' ? 'pendiente' : (current?.pago_estado || 'pendiente');
+          const estadoValue = (current?.pago_estado) || 'pendiente';
 
           return (
             <div>
