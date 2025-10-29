@@ -17,10 +17,18 @@ def create_app():
     app = Flask(__name__)
     load_dotenv()
     
-    # Configuración
+    # Configuración base desde config.py
     app.config.from_object('app.config.Config')
+
+    # 🔧 Forzar codificación UTF-8 y corregir URI con símbolo '@'
+    app.config['SQLALCHEMY_DATABASE_URI'] = (
+        "postgresql+psycopg2://postgres:Us%40t2025@localhost:5432/parroquia_db?client_encoding=utf8"
+    )
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        "connect_args": {"options": "-c client_encoding=UTF8"}
+    }
     
-    # Inicializar extensiones
+    # Inicializar extensionescle
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)

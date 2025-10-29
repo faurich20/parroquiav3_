@@ -6,7 +6,7 @@ class Config:
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'jwt-clave-secreta-temporal-parroquia-2024')
     
     # CONEXIÓN DIRECTA CON CODIFICACIÓN FORZADA UTF-8
-    SQLALCHEMY_DATABASE_URI = 'postgresql://postgres:982619321@localhost:5432/parroquia_db'
+    SQLALCHEMY_DATABASE_URI = 'postgresql+psycopg2:://postgres:982619321@localhost:5432/parroquia_db'
     
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     

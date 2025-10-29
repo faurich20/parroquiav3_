@@ -15,7 +15,7 @@ class DatabaseManager:
             'host': 'localhost',
             'port': 5432,
             'user': 'postgres',
-            'password': '982619321'
+            'password': 'Us@t2025'
         }
     
     def check_postgres_connection(self):
@@ -48,8 +48,8 @@ class DatabaseManager:
                     CREATE DATABASE parroquia_db
                     WITH 
                     ENCODING 'UTF8'
-                    LC_COLLATE 'es_ES.UTF-8'
-                    LC_CTYPE 'es_ES.UTF-8'
+                    LC_COLLATE 'Spanish_Spain.1252'
+                    LC_CTYPE 'Spanish_Spain.1252'
                     TEMPLATE template0
                     OWNER postgres
                 """)
@@ -65,6 +65,9 @@ class DatabaseManager:
             print(f"❌ Error creando base de datos: {e}")
             return False
     
+    # -----------------------------------------------------
+    # 3. Verificar conexión a la base de datos específica
+    # -----------------------------------------------------
     def verify_database_connection(self):
         """Verifica que se pueda conectar a la base de datos específica"""
         try:
@@ -72,23 +75,28 @@ class DatabaseManager:
                 host='localhost',
                 port=5432,
                 user='postgres',
-                password='982619321',
-                database='parroquia_db'
+                password=self.db_config['password'],
+                database='parroquia_db',
+                options='-c client_encoding=UTF8'
             )
-            
+
             cursor = conn.cursor()
-            # Forzar UTF-8 en la conexión actual
-            cursor.execute("SET client_encoding TO 'UTF8'")
             cursor.execute("SHOW client_encoding")
             encoding = cursor.fetchone()[0]
-            print(f"✅ Conexión a BD establecida. Encoding: {encoding}")
-            
+
+            # Mensaje seguro contra bytes inválidos
+            safe_message = f"✅ Conexión a BD establecida. Encoding: {encoding}"
+            print(safe_message.encode('utf-8', 'replace').decode('utf-8', 'replace'))
+
             cursor.close()
             conn.close()
             return True
-            
+
         except Exception as e:
-            print(f"❌ Error conectando a la base de datos: {e}")
+            import traceback
+            msg = str(e).encode('utf-8', 'replace').decode('utf-8', 'replace')
+            print(f"❌ Error conectando a la base de datos: {msg}")
+            traceback.print_exc()
             return False
     
     def initialize_tables_and_data(self):
