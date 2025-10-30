@@ -201,7 +201,7 @@ CREATE TABLE IF NOT EXISTS public.reserva (
   horarioid        INTEGER NOT NULL REFERENCES public.horario(horarioid) ON DELETE CASCADE,
   personaid        INTEGER REFERENCES public.persona(personaid) ON DELETE SET NULL,
   res_persona_nombre VARCHAR(255), -- Nombre de persona no registrada (si personaid es NULL)
-  res_descripcion  TEXT NOT NULL,
+  res_descripcion  TEXT NULL,
   pagoid           INTEGER REFERENCES public.pago(pagoid) ON DELETE SET NULL, -- FK a public.pago
   created_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()

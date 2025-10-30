@@ -9,6 +9,7 @@ import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
 import ModalBase from '../../components/Modals/ModalBase';
+import ModalReserva from '../../components/Modals/ModalReserva';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import useLiturgicalCalendar from '../../hooks/useLiturgicalCalendar';
 import useLiturgicalReservations from '../../hooks/useLiturgicalReservations';
@@ -17,6 +18,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import EditableCombobox from '../../components/Form/EditableCombobox'; // <-- nueva importación
 
 // Configurar iconos de Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -127,6 +129,20 @@ const Horarios = () => {
     cardHolder: ''
   });
 
+  // Filtro por parroquia para el calendario
+  const [selectedParroquia, setSelectedParroquia] = useState('');
+
+  // Entrada editable para el filtro de parroquia
+  const [parroquiaInput, setParroquiaInput] = useState('');
+
+  // Opciones preparadas para el combobox (label/value)
+  const parroquiasOptions = useMemo(() => (
+    parroquias.map(p => ({
+      value: String(p.parroquiaid),
+      label: `${p.par_nombre} - ${p.par_direccion} (${p.dis_nombre})`
+    }))
+  ), [parroquias]);
+
   // Cargar parroquias
   useEffect(() => {
     const loadParroquias = async () => {
@@ -196,6 +212,41 @@ const Horarios = () => {
     }
   }, [authFetch]);
 
+  // ----------------------------------------------------------
+  // MOVIDO: handler para el combobox editable definido **DESPUÉS**
+  // de la función loadHorarios para evitar TDZ / ReferenceError
+  // ----------------------------------------------------------
+  const handleParroquiaInputChange = useCallback((text) => {
+    setParroquiaInput(text || '');
+    if (!text || text.trim() === '') {
+      // limpiar filtro
+      setSelectedParroquia('');
+      loadHorarios();
+      return;
+    }
+
+    // buscar coincidencia exacta por label (case-insensitive)
+    const match = parroquiasOptions.find(opt => String(opt.label).toLowerCase() === String(text).toLowerCase());
+    if (match) {
+      setSelectedParroquia(match.value);
+      loadHorarios(match.value);
+    } else {
+      // Si no hay coincidencia exacta, no aplicamos filtro aún (el usuario está escribiendo)
+      setSelectedParroquia('');
+    }
+  }, [parroquiasOptions, loadHorarios]);
+
+  // Cuando el usuario selecciona una parroquia para filtrar, cargar horarios filtrados
+  const handleParroquiaFilter = useCallback((parroquiaId) => {
+    setSelectedParroquia(parroquiaId);
+    if (parroquiaId) {
+      loadHorarios(parroquiaId);
+    } else {
+      // quitar filtro: recargar todos los horarios (si se desea mantener vacíos, se puede setear([]))
+      loadHorarios();
+    }
+  }, [loadHorarios]);
+
   // Cargar horarios cuando cambian parroquia/fecha en el modal
   useEffect(() => {
     if (!reservaModalOpen) return;
@@ -215,35 +266,128 @@ const Horarios = () => {
     }
   }, [user, refetch]);
 
-  // Mapear los datos de la API al formato que espera react-big-calendar
+  // Mapear los datos (si hay filtro por parroquia usamos `horarios`, sino usamos `items`)
   const events = useMemo(() => {
-    if (!items || items.length === 0) return [];
-    return items.map(event => {
-      try {
-        const eventDate = event.date;
-        const eventTime = event.time;
-        if (!eventDate || !eventTime) return null;
-        const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
-        if (isNaN(startDateTime.getTime())) return null;
-        const endDateTime = new Date(startDateTime.getTime() + (60 * 60 * 1000));
-        return {
-          id: event.horarioid,
-          title: event.title || 'Sin título',
-          start: startDateTime,
-          end: endDateTime,
-          location: event.location || 'Sin ubicación',
-          type: event.type || 'misa',
-          allDay: false,
-          reservas_count: event.reservas_count || 0,
-          reservas_activas_count: event.reservas_activas_count || 0,
-          actoliturgicoid: event.actoliturgicoid
-        };
-      } catch (error) {
-        console.error('Error procesando horario:', event, error);
-        return null;
-      }
-    }).filter(Boolean);
-  }, [items]);
+	// Helper: extrae el id de parroquia desde varias formas posibles
+	const extractParroquiaId = (obj) => {
+		if (!obj) return '';
+		// campos directos
+		if (obj.parroquiaid) return String(obj.parroquiaid);
+		if (obj.parroquia_id) return String(obj.parroquia_id);
+		if (obj.parid) return String(obj.parid);
+		// objeto anidado (por ejemplo: { parroquia: { parroquiaid: ... } })
+		if (obj.parroquia && (obj.parroquia.parroquiaid || obj.parroquia.id)) {
+			return String(obj.parroquia.parroquiaid ?? obj.parroquia.id);
+		}
+		// fallback a posible campo en 'raw'
+		if (obj.raw) {
+			return extractParroquiaId(obj.raw);
+		}
+		return '';
+	};
+
+	const sourceIsHorarios = !!selectedParroquia;
+
+	if (sourceIsHorarios) {
+		// Si la API devolvió horarios para la parroquia, úsalos
+		if (horarios && horarios.length > 0) {
+			return horarios.map(h => {
+				try {
+					const eventDate = h.h_fecha;
+					const eventTime = h.h_hora;
+					if (!eventDate || !eventTime) return null;
+					const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
+					if (isNaN(startDateTime.getTime())) return null;
+					const endDateTime = new Date(startDateTime.getTime() + (60 * 60 * 1000));
+					return {
+						id: h.horarioid,
+						title: h.acto_titulo || h.acto_nombre || h.act_nombre || 'Sin título',
+						start: startDateTime,
+						end: endDateTime,
+						location: h.parroquia_nombre || h.par_nombre || 'Sin ubicación',
+						// Usar el nombre real del acto (act_nombre / acto_nombre) para que coincida con LITURGICAL_TYPES
+						type: h.acto_nombre || h.act_nombre || h.acto_tipo || h.type || 'misa',
+						allDay: false,
+						reservas_count: h.reservas_count || 0,
+						reservas_activas_count: h.reservas_activas_count || 0,
+						raw: h
+					};
+				} catch (err) {
+					console.error('Error procesando horario (horarios):', h, err);
+					return null;
+				}
+			}).filter(Boolean);
+		}
+
+		// FALLBACK: si horarios está vacío por algún motivo, filtrar items del hook por parroquiaid
+		if (items && items.length > 0) {
+			return items
+				.filter(it => {
+					const pid = extractParroquiaId(it);
+					return pid && String(pid) === String(selectedParroquia);
+				})
+				.map(event => {
+					try {
+						const eventDate = event.date || event.h_fecha;
+						const eventTime = event.time || event.h_hora;
+						if (!eventDate || !eventTime) return null;
+						const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
+						if (isNaN(startDateTime.getTime())) return null;
+						const endDateTime = new Date(startDateTime.getTime() + (60 * 60 * 1000));
+						return {
+							id: event.horarioid ?? event.id,
+							title: event.title || event.acto_titulo || event.acto_nombre || event.act_nombre || 'Sin título',
+							start: startDateTime,
+							end: endDateTime,
+							location: event.location || event.parroquia_nombre || 'Sin ubicación',
+							// Intentar obtener el tipo desde acto/act_nombre antes de usar el tipo genérico
+							type: event.type || event.acto_nombre || event.acto_titulo || event.acto_tipo || 'misa',
+							allDay: false,
+							reservas_count: event.reservas_count || 0,
+							reservas_activas_count: event.reservas_activas_count || 0,
+							raw: event
+						};
+					} catch (err) {
+						console.error('Error procesando item (fallback por parroquia):', event, err);
+						return null;
+					}
+				})
+				.filter(Boolean);
+		}
+
+		// Si no hay nada, retornar arreglo vacío
+		return [];
+	}
+
+	// Comportamiento original: usar items del hook
+	if (!items || items.length === 0) return [];
+	return items.map(event => {
+		try {
+			const eventDate = event.date;
+			const eventTime = event.time;
+			if (!eventDate || !eventTime) return null;
+			const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
+			if (isNaN(startDateTime.getTime())) return null;
+			const endDateTime = new Date(startDateTime.getTime() + (60 * 60 * 1000));
+			return {
+				id: event.horarioid,
+				title: event.title || 'Sin título',
+				start: startDateTime,
+				end: endDateTime,
+				location: event.location || 'Sin ubicación',
+				type: event.type || 'misa',
+				allDay: false,
+				reservas_count: event.reservas_count || 0,
+				reservas_activas_count: event.reservas_activas_count || 0,
+				actoliturgicoid: event.actoliturgicoid,
+				raw: event // mantener referencia al objeto original
+			};
+		} catch (error) {
+			console.error('Error procesando horario:', event, error);
+			return null;
+		}
+	}).filter(Boolean);
+}, [items, horarios, selectedParroquia]);
 
   // Estilos personalizados para los eventos según su tipo
   const eventStyleGetter = (event) => {
@@ -284,14 +428,12 @@ const Horarios = () => {
   // Confirmar creación de reserva
   const confirmReservation = useCallback(() => {
     if (pendingReservation) {
-      const { dateStr, timeStr, horarioid } = pendingReservation;
-      
-      // En lugar de navegar, abrir el modal directamente
+      const { dateStr, timeStr, horarioid, parroquiaid } = pendingReservation;
       setReservaData({
         h_fecha: dateStr,
         h_hora: timeStr,
         horarioid: horarioid || '',
-        parroquiaid: '',
+        parroquiaid: parroquiaid || (selectedParroquia || ''), // PREFILL parroquia si viene del filtro
         persona_nombre: '',
         res_descripcion: '',
         pago_estado: 'pendiente'
@@ -300,9 +442,9 @@ const Horarios = () => {
     }
     setConfirmOpen(false);
     setPendingReservation(null);
-  }, [pendingReservation]);
+  }, [pendingReservation, selectedParroquia]);
 
-  // Manejador para crear nueva reserva al seleccionar un slot vacío
+  // REEMPLAZA handleSelectSlot por esta versión mejorada
   const handleSelectSlot = useCallback(({ start, end }) => {
     if (!start || !end || !(start instanceof Date) || !(end instanceof Date) || isNaN(start.getTime()) || isNaN(end.getTime())) {
       return;
@@ -316,43 +458,95 @@ const Horarios = () => {
 
       const dateStr = format(start, 'yyyy-MM-dd');
       const timeStr = format(start, 'HH:mm');
-      const hasEventsForDay = events.some(evt => startOfDay(evt.start).getTime() === selectedDate.getTime());
 
-      if (!hasEventsForDay) {
-        setNoSchedulesOpen(true);
+      // Buscar un evento EXACTO en la misma fecha/hora (si existe)
+      const matchingEvent = events.find(evt => {
+        try {
+          return evt.start instanceof Date && evt.start.getTime() === start.getTime();
+        } catch { return false; }
+      });
+
+      if (!matchingEvent) {
+        // si no hay evento preciso pero sí hay eventos en el día, mostrar aviso o permitir crear sin horario
+        const hasEventsForDay = events.some(evt => startOfDay(evt.start).getTime() === selectedDate.getTime());
+        if (!hasEventsForDay) {
+          setNoSchedulesOpen(true);
+          return;
+        }
+
+        // Crear reserva sin horario (usuario escogerá)
+        setPendingReservation({ dateStr, timeStr, horarioid: null, parroquiaid: selectedParroquia || null });
+        setConfirmOpen(true);
         return;
       }
 
-      setPendingReservation({ dateStr, timeStr, horarioid: null });
+      // Si hay un evento exacto, pre-llenar con su horario y parroquia (si están disponibles)
+      const raw = matchingEvent.raw || {};
+      const horarioId = raw.horarioid || matchingEvent.id;
+      const parroquiaId = raw.parroquiaid || raw.parroquia?.parroquiaid || selectedParroquia || null;
+
+      setPendingReservation({ dateStr, timeStr, horarioid: horarioId, parroquiaid: parroquiaId });
       setConfirmOpen(true);
     } catch (error) {
       console.error('Error en handleSelectSlot:', error);
     }
-  }, [confirmOpen, noSchedulesOpen, events]);
+  }, [confirmOpen, noSchedulesOpen, events, selectedParroquia]);
 
-  // Manejador para redirigir a reservas al hacer click en un evento
-  const handleSelectEvent = useCallback((event) => {
-    if (!event || !event.id) return;
+  // Reemplazar handleSelectEvent por la versión que busca en `events` y normaliza campos
+  const handleSelectEvent = useCallback((clicked) => {
+    if (!clicked || !clicked.id) return;
     if (confirmOpen) return;
 
     try {
-      const fullEvent = items.find(item => item.horarioid === event.id);
-      if (fullEvent && fullEvent.date) {
-        const today = startOfDay(new Date());
-        const eventDate = startOfDay(new Date(fullEvent.date));
-        if (isBefore(eventDate, today)) return;
+      const ev = events.find(e => String(e.id) === String(clicked.id));
+      if (!ev) {
+        let fallback = (horarios || []).find(h => String(h.horarioid) === String(clicked.id));
+        if (!fallback && items && items.length) {
+          fallback = items.find(it => String(it.horarioid) === String(clicked.id) || String(it.id) === String(clicked.id));
+        }
+        if (fallback) {
+          const fecha = fallback.h_fecha || fallback.date;
+          const hora = fallback.h_hora || fallback.time;
+          if (fecha) {
+            const today = startOfDay(new Date());
+            const eventDate = startOfDay(new Date(fecha));
+            if (isBefore(eventDate, today)) return;
+            setPendingReservation({
+              dateStr: fecha,
+              timeStr: hora,
+              horarioid: fallback.horarioid || fallback.id,
+              parroquiaid: fallback.parroquiaid || (fallback.parroquia && (fallback.parroquia.parroquiaid || fallback.parroquia.id)) || selectedParroquia || null
+            });
+            setConfirmOpen(true);
+            return;
+          }
+        }
+        return;
+      }
 
+      // ev puede provenir de 'horarios' o de 'items' mapeados; usar ev.raw si existe
+      const raw = ev.raw || {};
+      const fecha = raw.h_fecha || raw.date || (ev.start ? format(ev.start, 'yyyy-MM-dd') : '');
+      const hora = raw.h_hora || raw.time || (ev.start ? format(ev.start, 'HH:mm') : '');
+      const parroquiaId = raw.parroquiaid || raw.parroquia?.parroquiaid || selectedParroquia || null;
+      const horarioId = raw.horarioid || raw.id || ev.id;
+
+      if (fecha) {
+        const today = startOfDay(new Date());
+        const eventDate = startOfDay(new Date(fecha));
+        if (isBefore(eventDate, today)) return;
         setPendingReservation({
-          dateStr: fullEvent.date,
-          timeStr: fullEvent.time,
-          horarioid: fullEvent.horarioid
+          dateStr: fecha,
+          timeStr: hora,
+          horarioid: horarioId,
+          parroquiaid: parroquiaId
         });
         setConfirmOpen(true);
       }
     } catch (err) {
       console.error('Error al abrir detalle del evento:', err);
     }
-  }, [confirmOpen, items]);
+  }, [confirmOpen, events, horarios, items, selectedParroquia]);
 
   // Función para renderizar campos del modal de reserva
   const renderField = (campo) => {
@@ -585,32 +779,29 @@ const Horarios = () => {
     if (v.h_fecha && v.h_fecha < today) return 'No se pueden seleccionar fechas pasadas';
     if (!v.parroquiaid) return 'Seleccione una parroquia';
     if (!v.horarioid) return 'Seleccione un horario';
-    if (!v.res_descripcion?.trim()) return 'Ingrese la descripción';
+    // res_descripcion ahora es opcional (nullable) -> no forzar su ingreso
     return '';
   };
 
   // Manejar envío de reserva
-  const handleSubmitReserva = async () => {
-    const validationError = validate(reservaData);
-    if (validationError) {
-      alert(validationError);
-      return;
-    }
-
+  const handleSubmitReserva = async (values) => {
+    // values proviene del ModalReserva (payload preparado)
     try {
-      // Si hay datos de pago, incluirlos
+      // Si onSubmit pasa payload ya procesado, se puede usar directamente.
+      // En caso contrario aceptar objeto con las propiedades esperadas.
       const payload = {
-        horarioid: parseInt(reservaData.horarioid),
-        persona_nombre: reservaData.persona_nombre,
-        res_descripcion: reservaData.res_descripcion
+        horarioid: Number(values.horarioid || reservaData.horarioid),
+        persona_nombre: values.persona_nombre || reservaData.persona_nombre,
+        res_descripcion: values.res_descripcion || reservaData.res_descripcion
       };
 
-      if (reservaData.pago_data) {
-        payload.pago_medio = reservaData.pago_data.pago_medio;
-        payload.pago_monto = reservaData.pago_data.pago_monto;
-        payload.pago_descripcion = reservaData.pago_data.pago_descripcion;
-        payload.pago_fecha = reservaData.pago_data.pago_fecha;
-        payload.pago_estado = reservaData.pago_data.pago_estado;
+      if (values.pago_data || reservaData.pago_data) {
+        const pago = values.pago_data || reservaData.pago_data;
+        payload.pago_medio = pago.pago_medio;
+        payload.pago_monto = pago.pago_monto;
+        payload.pago_descripcion = pago.pago_descripcion;
+        payload.pago_fecha = pago.pago_fecha;
+        payload.pago_estado = pago.pago_estado;
       }
 
       const result = await createItem(payload);
@@ -622,9 +813,11 @@ const Horarios = () => {
       } else {
         alert(result.error || 'Error al crear reserva');
       }
+      return result;
     } catch (error) {
       console.error('Error creando reserva:', error);
       alert('Error al crear reserva: ' + error.message);
+      return { success: false, error: error.message };
     }
   };
 
@@ -900,6 +1093,25 @@ const Horarios = () => {
         </motion.button>
       </PageHeader>
 
+      {/* Filtro por Parroquia */}
+      <Card className="p-4">
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium text-gray-700">Filtrar por Parroquia:</label>
+
+          {/* Reemplazado select por EditableCombobox */}
+          <div style={{ width: 420 }}>
+            <EditableCombobox
+              value={parroquiaInput}
+              onChange={handleParroquiaInputChange}
+              options={parroquiasOptions}
+              placeholder="Escriba o seleccione una parroquia..."
+              id="filter-parroquia"
+            />
+          </div>
+
+        </div>
+      </Card>
+
       {/* Leyenda de tipos de actos */}
       <Card className="p-4">
         <div className="flex flex-wrap gap-4 items-center">
@@ -1036,114 +1248,14 @@ const Horarios = () => {
         </Card>
       )}
 
-      {/* Modal de Nueva Reserva */}
-      <ModalBase
+      {/* Modal de Nueva Reserva -> ahora usa ModalReserva */}
+      <ModalReserva
         isOpen={reservaModalOpen}
-        title="Nueva Reserva"
-        icon={Calendar}
-        onClose={() => {
-          setReservaModalOpen(false);
-          setReservaData({});
-        }}
-        size="xl"
-        closeOnOverlay={false}
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
-          {/* Columna izquierda: Mapa */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-lg font-semibold text-gray-700">
-              <span className="text-2xl">🗺️</span>
-              Ubicación de Parroquias
-            </div>
-            <div className="rounded-lg overflow-hidden border border-gray-200">
-              <div className="w-full rounded overflow-hidden" style={{ height: 600 }}>
-                <MapContainer
-                  key={mapKey}
-                  center={[-6.7437, -79.8715]}
-                  zoom={10}
-                  style={{ height: '100%', width: '100%' }}
-                  scrollWheelZoom={true}
-                >
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
-                  {Object.entries(parroquiasCoords).map(([parroquiaId, { coords, parroquia }]) => (
-                    <Marker
-                      key={parroquiaId}
-                      position={[coords.lat, coords.lng]}
-                      icon={createCustomIcon('⛪')}
-                      eventHandlers={{
-                        click: () => {
-                          console.log('🗺️ Click en marcador - Parroquia:', parroquia.par_nombre, 'ID:', parroquiaId);
-                          // Actualizar el campo parroquiaid y limpiar horarioid
-                          setReservaData(prev => ({
-                            ...prev,
-                            parroquiaid: parroquiaId,
-                            horarioid: '' // Limpiar horario al cambiar parroquia
-                          }));
-                          // Mostrar mensaje de confirmación
-                          console.log('✅ Parroquia seleccionada:', parroquia.par_nombre);
-                        }
-                      }}
-                    >
-                      <Popup>
-                        <div className="text-sm p-2">
-                          <div className="font-bold text-lg mb-1">{parroquia.par_nombre}</div>
-                          <div className="text-gray-600 mb-1">{parroquia.par_direccion}</div>
-                          <div className="text-gray-500 mb-2">{parroquia.dis_nombre}</div>
-                          <div className="text-green-600 text-xs font-mono">
-                            📍 {coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}
-                          </div>
-                          <div className="mt-2 pt-2 border-t border-gray-200">
-                            <p className="text-blue-600 text-xs font-medium">
-                              👆 Haz clic en el marcador para seleccionar esta parroquia
-                            </p>
-                          </div>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                </MapContainer>
-              </div>
-            </div>
-          </div>
-
-          {/* Columna derecha: Formulario */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-lg font-semibold text-gray-700">
-              <span className="text-2xl">📋</span>
-              Información de la Reserva
-            </div>
-            <div className="space-y-4">
-              {fields.map((field) => renderField(field))}
-            </div>
-            <div className="flex gap-3 pt-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setReservaModalOpen(false);
-                  setReservaData({});
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-black"
-              >
-                Cerrar
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmitReserva}
-                className="flex-1 px-4 py-2 text-white rounded-lg hover:brightness-110"
-                style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}
-              >
-                Crear Reserva
-              </button>
-            </div>
-          </div>
-        </div>
-      </ModalBase>
-
-      {/* Modal de pago */}
-      {renderPaymentModal()}
+        initialValues={reservaData}
+        onClose={() => { setReservaModalOpen(false); setReservaData({}); }}
+        onSubmit={handleSubmitReserva}
+        authFetch={authFetch}
+      />
 
       {/* Diálogo de confirmación */}
       <DialogoConfirmacion

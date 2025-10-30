@@ -18,10 +18,10 @@ export const AuthProvider = ({ children }) => {
   // ⚙️ CONFIGURACIÓN DE TIEMPOS (más legible)
   // Formato: { minutos: X, segundos: Y }
   const TIEMPO_CONFIG = {
-  TOKEN_DURACION: { minutos: 1, segundos: 0 },      // Igual que backend
+  TOKEN_DURACION: { minutos: 30, segundos: 0 },      // Igual que backend
   REFRESH_ANTICIPADO: { minutos: 0, segundos: 10 }, // 10s antes de expirar
-  AVISO_INACTIVIDAD: { minutos: 0, segundos: 45 },  // Aviso a los 45s
-  LOGOUT_INACTIVIDAD: { minutos: 1, segundos: 0 }   // Logout a 1 min
+  AVISO_INACTIVIDAD: { minutos: 29, segundos: 0 },  // Aviso a los 45s
+  LOGOUT_INACTIVIDAD: { minutos: 30, segundos: 0 }   // Logout a 1 min
 };
 
   // 🔧 Función helper para convertir a milisegundos

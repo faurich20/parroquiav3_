@@ -12,7 +12,7 @@ class Config:
     
     # ⚙️ TIEMPOS SINCRONIZADOS CON FRONTEND
     # Access token: 15 minutos (frontend hace refresh proactivo a los 13 min)
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=1)
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=30)
     
     # Refresh token: 7 días (con rotación en cada uso)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=7)

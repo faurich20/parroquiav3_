@@ -7,6 +7,7 @@ import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 import TablaConPaginacion from '../../components/Common/TablaConPaginacion';
 import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico';
+import ModalReserva from '../../components/Modals/ModalReserva'; // <--- nuevo
 import useLiturgicalReservations from '../../hooks/useLiturgicalReservations';
 import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
 import { buildActionColumn } from '../../components/Common/ActionColumn';
@@ -118,9 +119,10 @@ const Reservacion = () => {
   const [horarios, setHorarios] = useState([]);
   const [parroquias, setParroquias] = useState([]);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  // Estado para coordenadas y control del mapa (usado por el efecto de geocoding)
+  const [parroquiasCoords, setParroquiasCoords] = useState({});
   const [mapKey, setMapKey] = useState(0);
   // Hook personalizado para geocoding de parroquias
-  const [parroquiasCoords, setParroquiasCoords] = useState({});
   // Estado para modal de pago
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentData, setPaymentData] = useState({
@@ -246,130 +248,6 @@ const Reservacion = () => {
       loadHorarios(); // En modo add, cargar todos si no hay filtros
     }
   }, [modalOpen, modalMode, current?.parroquiaid, current?.h_fecha, loadHorarios]);
-
-  // Función para renderizar modal personalizada con mapa
-  const renderReservationModal = () => {
-    if (!modalOpen || modalMode !== 'add') return null;
-
-    return (
-      <ModalBase
-        isOpen={modalOpen}
-        title="Nueva Reserva"
-        icon={Calendar}
-        onClose={() => setModalOpen(false)}
-        size="xl"
-        closeOnOverlay={false}
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6">
-          {/* Columna izquierda: Mapa */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-lg font-semibold text-gray-700">
-              <span className="text-2xl">🗺️</span>
-              Ubicación de Parroquias
-            </div>
-            <div className="rounded-lg overflow-hidden border border-gray-200">
-              {/* Mapa interactivo con marcadores individuales usando React Leaflet */}
-              <div className="w-full rounded overflow-hidden" style={{ height: 600 }}>
-                <MapContainer
-                  key={mapKey}
-                  center={[-6.7437, -79.8715]} // Centro promedio calculado
-                  zoom={10}
-                  style={{ height: '100%', width: '100%' }}
-                  scrollWheelZoom={true}
-                >
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
-
-                  {/* Marcadores dinámicos para cada parroquia usando geocoding */}
-                  {Object.entries(parroquiasCoords).map(([parroquiaId, { coords, parroquia }]) => (
-                    <Marker
-                      key={parroquiaId}
-                      position={[coords.lat, coords.lng]}
-                      icon={createCustomIcon('⛪')}
-                      eventHandlers={{
-                        click: () => {
-                          console.log('🗺️ [RESERVACION] Click en marcador - Parroquia:', parroquia.par_nombre, 'ID:', parroquiaId);
-                          setCurrent(prev => ({
-                            ...prev,
-                            parroquiaid: parroquiaId,
-                            horarioid: ''
-                          }));
-                          console.log('✅ [RESERVACION] Parroquia seleccionada:', parroquia.par_nombre);
-                        }
-                      }}
-                    >
-                      <Popup>
-                        <div className="text-sm p-2">
-                          <div className="font-bold text-lg mb-1">{parroquia.par_nombre}</div>
-                          <div className="text-gray-600 mb-1">{parroquia.par_direccion}</div>
-                          <div className="text-gray-500 mb-2">{parroquia.dis_nombre}</div>
-                          <div className="text-green-600 text-xs font-mono">
-                            📍 {coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}
-                          </div>
-                          <div className="mt-2 pt-2 border-t border-gray-200">
-                            <p className="text-blue-600 text-xs font-medium">
-                              👆 Haz clic en el marcador para seleccionar esta parroquia
-                            </p>
-                          </div>
-                        </div>
-                      </Popup>
-                    </Marker>
-                  ))}
-                </MapContainer>
-              </div>
-            </div>
-          </div>
-
-          {/* Columna derecha: Formulario */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-lg font-semibold text-gray-700">
-              <span className="text-2xl">📋</span>
-              Información de la Reserva
-            </div>
-
-            {/* Renderizar campos del formulario aquí */}
-            <div className="space-y-4">
-              {fields.map((field) => renderField(field))}
-            </div>
-
-            {/* Botones */}
-            <div className="flex gap-3 pt-4">
-              <button
-                type="button"
-                onClick={() => setModalOpen(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-black hover:text-gray-900"
-              >
-                Cerrar
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  // Lógica para crear reserva
-                  const validationError = validate(current || {});
-                  if (validationError) {
-                    alert(validationError);
-                    return;
-                  }
-                  const result = await handleSubmit(current || {});
-                  if (result?.success) {
-                    setModalOpen(false);
-                  } else {
-                    alert(result?.error || 'Error al crear reserva');
-                  }
-                }}
-                className="flex-1 px-4 py-2 text-white rounded-lg hover:brightness-110"
-                style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}
-              >
-                Crear Reserva
-              </button>
-            </div>
-          </div>
-        </div>
-      </ModalBase>
-    );
-  };
 
   // Función para renderizar campos del formulario
   const renderField = (campo) => {
@@ -1215,7 +1093,7 @@ const Reservacion = () => {
     return (v) => {
       // En modo edición, no validar campos que están deshabilitados
       if (modalMode === 'edit') {
-        if (!v.res_descripcion?.trim()) return 'Ingrese la descripción';
+        // res_descripcion ya no es obligatorio
         return '';
       }
 
@@ -1229,7 +1107,7 @@ const Reservacion = () => {
 
       if (!v.parroquiaid) return 'Seleccione una parroquia';
       if (!v.horarioid) return 'Seleccione un horario';
-      if (!v.res_descripcion?.trim()) return 'Ingrese la descripción';
+      // res_descripcion es opcional ahora
       return '';
     };
   }, [modalMode]);
@@ -1392,8 +1270,14 @@ const Reservacion = () => {
         })()}
       </Card>
 
-      {/* Modal personalizado para nueva reserva con mapa */}
-      {renderReservationModal()}
+      {/* Modal reutilizado para nueva reserva (mapa + formulario) */}
+      <ModalReserva
+        isOpen={modalOpen && modalMode === 'add'}
+        initialValues={current || {}}
+        onClose={() => setModalOpen(false)}
+        onSubmit={handleSubmit}    // handleSubmit espera values y creará la reserva
+        authFetch={authFetch}
+      />
 
       {/* Modal de pago */}
       {renderPaymentModal()}

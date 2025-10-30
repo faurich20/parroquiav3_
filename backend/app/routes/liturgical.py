@@ -456,9 +456,32 @@ def delete_acto(acto_id):
 @liturgical_bp.route('/horarios', methods=['GET'])
 @jwt_required()
 def list_horarios():
-    """Lista todos los horarios de actos litúrgicos"""
+    """Lista todos los horarios de actos litúrgicos (acepta filtros por parroquia y fecha)"""
     try:
-        items = db.session.execute(text("""
+        # Leer parámetros opcionales
+        parroquia_id = request.args.get('parroquiaid', type=int)
+        fecha_str = request.args.get('fecha', type=str)
+
+        params = {}
+        where_clauses = []
+
+        # Aplicar filtro por parroquia si se proporcionó
+        if parroquia_id:
+            where_clauses.append('a.parroquiaid = :parroquiaid')
+            params['parroquiaid'] = parroquia_id
+
+        # Aplicar filtro por fecha si se proporcionó (validar formato YYYY-MM-DD)
+        if fecha_str:
+            fecha = parse_date(fecha_str)
+            if not fecha:
+                return jsonify({'error': 'Fecha inválida'}), 400
+            where_clauses.append('h.h_fecha = :fecha')
+            params['fecha'] = fecha
+
+        where_sql = ('WHERE ' + ' AND '.join(where_clauses)) if where_clauses else ''
+
+        # Consulta parametrizada con cláusula WHERE dinámica
+        items = db.session.execute(text(f"""
             SELECT
                 h.horarioid,
                 h.actoliturgicoid,
@@ -468,16 +491,15 @@ def list_horarios():
                 h.h_hora,
                 a.parroquiaid,
                 p.par_nombre as parroquia_nombre,
-                h.created_at,
-                h.updated_at,
-                COUNT(r.reservaid) as reservas_total
+                COALESCE(COUNT(r.reservaid), 0) as reservas_total
             FROM public.horario h
             LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
             LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
             LEFT JOIN public.reserva r ON h.horarioid = r.horarioid
-            GROUP BY h.horarioid, h.actoliturgicoid, a.act_nombre, a.act_titulo, h.h_fecha, h.h_hora, a.parroquiaid, p.par_nombre, h.created_at, h.updated_at
+            {where_sql}
+            GROUP BY h.horarioid, h.actoliturgicoid, a.act_nombre, a.act_titulo, h.h_fecha, h.h_hora, a.parroquiaid, p.par_nombre
             ORDER BY h.h_fecha DESC, h.h_hora DESC
-        """)).fetchall()
+        """), params).fetchall()
 
         result = []
         for row in items:
@@ -491,8 +513,8 @@ def list_horarios():
                 'parroquiaid': row.parroquiaid,
                 'parroquia_nombre': row.parroquia_nombre,
                 'reservas_total': row.reservas_total,
-                'created_at': row.created_at.isoformat() if row.created_at else None,
-                'updated_at': row.updated_at.isoformat() if row.updated_at else None
+                'created_at': getattr(row, 'created_at', None).isoformat() if getattr(row, 'created_at', None) else None,
+                'updated_at': getattr(row, 'updated_at', None).isoformat() if getattr(row, 'updated_at', None) else None
             })
 
         return jsonify({'items': result}), 200
@@ -652,19 +674,19 @@ def create_reserva():
     try:
         data = request.get_json() or {}
 
+        # Antes: res_descripcion era requerido. Ahora es opcional (nullable).
         required = [
             data.get('horarioid'),
-            data.get('res_descripcion')
+            # data.get('res_descripcion')  # <-- ya no obligatorio
         ]
 
         if any(v in [None, '', False] for v in required):
-            return jsonify({'error': 'horarioid y res_descripcion son requeridos'}), 400
+            return jsonify({'success': False, 'error': 'horarioid es requerido'}), 400
 
         # Determinar si es persona registrada o no registrada
-        # IMPORTANTE: Ignorar personaid del frontend, siempre buscar por nombre
         persona_nombre = data.get('persona_nombre', '').strip()
         personaid = None
-        
+
         # Si hay persona_nombre, buscar si existe en la BD
         if persona_nombre:
             persona_existente = db.session.execute(text("""
@@ -717,8 +739,9 @@ def create_reserva():
         """), {
             'horarioid': data.get('horarioid'),
             'personaid': personaid,
-            'res_persona_nombre': persona_nombre if not personaid else None,  # Solo guardar si no hay personaid
-            'res_descripcion': (data.get('res_descripcion') or '').strip(),
+            'res_persona_nombre': persona_nombre if not personaid else None,
+            # Permitir que res_descripcion sea NULL si no se envía
+            'res_descripcion': (data.get('res_descripcion') if data.get('res_descripcion') is not None else None),
             'pagoid': pagoid
         })
 
@@ -799,7 +822,7 @@ def create_reserva():
     except Exception as e:
         print('Error create_reserva', e)
         db.session.rollback()
-        return jsonify({'error': 'Error interno del servidor'}), 500
+        return jsonify({'success': False, 'error': 'Error interno'}), 500
 
 @liturgical_bp.route('/reservas/<int:reservaid>', methods=['PUT'])
 @jwt_required()
@@ -1009,7 +1032,7 @@ def get_horarios_by_date(date_str):
             LEFT JOIN public.reserva r ON h.horarioid = r.horarioid
             LEFT JOIN public.pago pg ON r.pagoid = pg.pagoid
             WHERE h.h_fecha = :fecha
-            GROUP BY h.horarioid, h.h_fecha, h.h_hora, a.act_nombre, a.act_titulo, p.par_nombre
+            GROUP BY h.horarioid, h.actoliturgicoid, a.act_nombre, a.act_titulo, p.par_nombre
             ORDER BY h.h_hora
         """), {'fecha': fecha}).fetchall()
 
