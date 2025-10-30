@@ -288,6 +288,17 @@ const Reservacion = () => {
                       key={parroquiaId}
                       position={[coords.lat, coords.lng]}
                       icon={createCustomIcon('⛪')}
+                      eventHandlers={{
+                        click: () => {
+                          console.log('🗺️ [RESERVACION] Click en marcador - Parroquia:', parroquia.par_nombre, 'ID:', parroquiaId);
+                          setCurrent(prev => ({
+                            ...prev,
+                            parroquiaid: parroquiaId,
+                            horarioid: ''
+                          }));
+                          console.log('✅ [RESERVACION] Parroquia seleccionada:', parroquia.par_nombre);
+                        }
+                      }}
                     >
                       <Popup>
                         <div className="text-sm p-2">
@@ -297,8 +308,10 @@ const Reservacion = () => {
                           <div className="text-green-600 text-xs font-mono">
                             📍 {coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}
                           </div>
-                          <div className="text-blue-600 text-xs mt-1">
-                            Geocodificado automáticamente
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <p className="text-blue-600 text-xs font-medium">
+                              👆 Haz clic en el marcador para seleccionar esta parroquia
+                            </p>
                           </div>
                         </div>
                       </Popup>
@@ -418,17 +431,16 @@ const Reservacion = () => {
             />
           </div>
         );
+
       case 'select':
         let selectOptions = campo.options || [];
         if (campo.dependsOn && campo.optionsFilter && typeof campo.optionsFilter === 'function') {
-          // Manejar dependencias múltiples (array) o simple (string)
           const dependsOnArray = Array.isArray(campo.dependsOn) ? campo.dependsOn : [campo.dependsOn];
           const dependValues = dependsOnArray.reduce((acc, dep) => {
             acc[dep] = (current || {})[dep];
             return acc;
           }, {});
 
-          // Solo filtrar si todas las dependencias tienen valores
           const hasAllDependencies = dependsOnArray.every(dep => dependValues[dep]);
           if (hasAllDependencies) {
             const filteredOptions = campo.optionsFilter(dependValues[dependsOnArray[0]], current || {});
@@ -446,7 +458,6 @@ const Reservacion = () => {
                   value={value}
                   onChange={(e) => {
                     setValue(e.target.value);
-                    // Limpiar campos dependientes
                     fields.forEach(f => {
                       if (f.dependsOn) {
                         const fieldDependsOnArray = Array.isArray(f.dependsOn) ? f.dependsOn : [f.dependsOn];
@@ -469,11 +480,10 @@ const Reservacion = () => {
                     </option>
                   ))}
                 </select>
-                {value === 'false' && ( // Cuando está en "Sin pagar"
+                {value === 'false' && (
                   <motion.button
                     onClick={() => {
                       setPaymentModalOpen(true);
-                      // Resetear datos de pago
                       setPaymentData({
                         pago_medio: '',
                         pago_monto: '',
@@ -496,14 +506,21 @@ const Reservacion = () => {
           );
         }
 
+        // Caso general para otros selects (incluye indicadores del mapa)
         return (
           <div key={campo.name}>
-            <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
+            <label className="block text-sm font-medium text-gray-500 mb-1">
+              {campo.label}
+              {campo.name === 'parroquiaid' && value && (
+                <span className="ml-2 text-xs text-green-600 font-normal">
+                  🗺️ Seleccionada desde el mapa
+                </span>
+              )}
+            </label>
             <select
               value={value}
               onChange={(e) => {
                 setValue(e.target.value);
-                // Limpiar campos dependientes
                 fields.forEach(f => {
                   if (f.dependsOn) {
                     const fieldDependsOnArray = Array.isArray(f.dependsOn) ? f.dependsOn : [f.dependsOn];
@@ -526,8 +543,15 @@ const Reservacion = () => {
                 </option>
               ))}
             </select>
+            {campo.name === 'parroquiaid' && !value && (
+              <p className="text-xs text-blue-600 mt-1">
+                💡 También puedes seleccionar una parroquia haciendo clic en el mapa
+              </p>
+            )}
           </div>
         );
+
+
       case 'combobox':
         const listId = `${campo.name}-datalist`;
         return (
@@ -1142,14 +1166,14 @@ const Reservacion = () => {
               <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>
               <div className="flex items-center gap-3">
                 <span className={`inline-block px-3 py-2 text-sm font-medium rounded-lg ${estadoValue === 'pendiente'
-                    ? 'bg-yellow-100 text-yellow-700 border border-yellow-200'
-                    : estadoValue === 'pagado'
-                      ? 'bg-green-100 text-green-700 border border-green-200'
-                      : estadoValue === 'vencido'
-                        ? 'bg-orange-100 text-orange-700 border border-orange-200'
-                        : estadoValue === 'fallido'
-                          ? 'bg-red-100 text-red-700 border border-red-200'
-                          : 'bg-gray-100 text-gray-700 border border-gray-200'
+                  ? 'bg-yellow-100 text-yellow-700 border border-yellow-200'
+                  : estadoValue === 'pagado'
+                    ? 'bg-green-100 text-green-700 border border-green-200'
+                    : estadoValue === 'vencido'
+                      ? 'bg-orange-100 text-orange-700 border border-orange-200'
+                      : estadoValue === 'fallido'
+                        ? 'bg-red-100 text-red-700 border border-red-200'
+                        : 'bg-gray-100 text-gray-700 border border-gray-200'
                   }`}>
                   {estadoValue.charAt(0).toUpperCase() + estadoValue.slice(1)}
                 </span>

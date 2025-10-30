@@ -380,7 +380,14 @@ const Horarios = () => {
       case 'select':
         return (
           <div key={campo.name}>
-            <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
+            <label className="block text-sm font-medium text-gray-500 mb-1">
+              {campo.label}
+              {campo.name === 'parroquiaid' && value && (
+                <span className="ml-2 text-xs text-green-600 font-normal">
+                  🗺️ Seleccionada desde el mapa
+                </span>
+              )}
+            </label>
             <select
               value={value}
               onChange={(e) => {
@@ -398,6 +405,11 @@ const Horarios = () => {
                 </option>
               ))}
             </select>
+            {campo.name === 'parroquiaid' && !value && (
+              <p className="text-xs text-blue-600 mt-1">
+                💡 También puedes seleccionar una parroquia haciendo clic en el mapa
+              </p>
+            )}
           </div>
         );
       case 'textarea':
@@ -1061,6 +1073,19 @@ const Horarios = () => {
                       key={parroquiaId}
                       position={[coords.lat, coords.lng]}
                       icon={createCustomIcon('⛪')}
+                      eventHandlers={{
+                        click: () => {
+                          console.log('🗺️ Click en marcador - Parroquia:', parroquia.par_nombre, 'ID:', parroquiaId);
+                          // Actualizar el campo parroquiaid y limpiar horarioid
+                          setReservaData(prev => ({
+                            ...prev,
+                            parroquiaid: parroquiaId,
+                            horarioid: '' // Limpiar horario al cambiar parroquia
+                          }));
+                          // Mostrar mensaje de confirmación
+                          console.log('✅ Parroquia seleccionada:', parroquia.par_nombre);
+                        }
+                      }}
                     >
                       <Popup>
                         <div className="text-sm p-2">
@@ -1069,6 +1094,11 @@ const Horarios = () => {
                           <div className="text-gray-500 mb-2">{parroquia.dis_nombre}</div>
                           <div className="text-green-600 text-xs font-mono">
                             📍 {coords.lat.toFixed(6)}, {coords.lng.toFixed(6)}
+                          </div>
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <p className="text-blue-600 text-xs font-medium">
+                              👆 Haz clic en el marcador para seleccionar esta parroquia
+                            </p>
                           </div>
                         </div>
                       </Popup>
