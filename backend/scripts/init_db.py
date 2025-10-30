@@ -15,7 +15,7 @@ class DatabaseManager:
             'host': 'localhost',
             'port': 5432,
             'user': 'postgres',
-            'password': 'Us@t2025'
+            'password': '982619321'
         }
     
     def check_postgres_connection(self):

@@ -22,7 +22,7 @@ def create_app():
 
     # 🔧 Forzar codificación UTF-8 y corregir URI con símbolo '@'
     app.config['SQLALCHEMY_DATABASE_URI'] = (
-        "postgresql+psycopg2://postgres:Us%40t2025@localhost:5432/parroquia_db?client_encoding=utf8"
+        "postgresql+psycopg2://postgres:982619321@localhost:5432/parroquia_db?client_encoding=utf8"
     )
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
         "connect_args": {"options": "-c client_encoding=UTF8"}
