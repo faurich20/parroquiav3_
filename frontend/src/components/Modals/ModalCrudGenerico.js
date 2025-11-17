@@ -28,40 +28,33 @@ const ModalCrudGenerico = ({
   const soloLectura = mode === 'view';
 
   useEffect(() => {
-    if (isOpen) {
-      const hasExistingValues = Object.values(values).some(val => val !== '' && val !== null && val !== undefined);
-
-      if (hasExistingValues) {
-        setErrores('');
-        setCargando(false);
-        return;
-      }
-
-      const newValues = {};
-      fields.forEach(field => {
-        let initialValue;
-
-        if (typeof field.getInitialValue === 'function') {
-          initialValue = field.getInitialValue();
-        } else {
-          initialValue = initialValues[field.name];
-          if (initialValue === undefined) {
-            initialValue = field.defaultValue !== undefined ? field.defaultValue : '';
-          }
-        }
-
-        newValues[field.name] = initialValue;
-      });
-
-      setValues(newValues);
-      setErrores('');
-      setCargando(false);
-    } else {
+    if (!isOpen) {
       setValues({});
       setErrores('');
       setCargando(false);
+      return;
     }
-  }, [isOpen, initialValues, fields, mode]);
+
+    const newValues = {};
+    fields.forEach(field => {
+      let initialValue;
+
+      if (typeof field.getInitialValue === 'function') {
+        initialValue = field.getInitialValue();
+      } else {
+        initialValue = initialValues[field.name];
+        if (initialValue === undefined) {
+          initialValue = field.defaultValue !== undefined ? field.defaultValue : '';
+        }
+      }
+
+      newValues[field.name] = initialValue;
+    });
+
+    setValues(newValues);
+    setErrores('');
+    setCargando(false);
+  }, [isOpen, mode]);
 
   const footer = useMemo(() => {
     if (soloLectura) {
@@ -296,14 +289,16 @@ const ModalCrudGenerico = ({
         {errores ? (
           <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">{errores}</div>
         ) : null}
-        {soloLectura && typeof readOnlyContent === 'function' ? (
-          <div className="space-y-4">{readOnlyContent(values)}</div>
-        ) : (
+        {soloLectura && typeof readOnlyContent === 'function' ? (        
+          <div className="space-y-4">{readOnlyContent(values)}</div>         
+        ) : (        
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* ✅ FIX: Ahora cada campo tiene su key única */}
             {fields.map((f) => renderCampo(f))}
-          </div>
+            {console.log('[ModalCrudGenerico] valores solo lectura:', values)}
+          </div>      
         )}
+        {console.log('[ModalCrudGenerico] valores solo lectura:', values)}
       </div>
     </ModalBase>
   );

@@ -108,7 +108,7 @@ const createCustomIcon = (label) => {
 
 const Reservacion = () => {
   const { items, loading, error, createItem, updateItem, removeItem } = useLiturgicalReservations({ autoList: true });
-  const { authFetch } = useAuth();
+  const { authFetch, hasPermission } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit' | 'view'
@@ -134,6 +134,12 @@ const Reservacion = () => {
     cvv: '',
     cardHolder: ''
   });
+
+  // Permisos para reservas (módulo)
+  const canCreate = hasPermission('liturgico_reservas_crear');
+  const canEdit = hasPermission('liturgico_reservas_editar');
+  const canDelete = hasPermission('liturgico_reservas_eliminar');
+  const canView = hasPermission('liturgico_reservas_ver');
 
   // Geocoding de todas las parroquias cuando se cargan
   useEffect(() => {
@@ -839,12 +845,16 @@ const Reservacion = () => {
       }
     },
     buildActionColumn({
-      onEdit: (row) => { setCurrent(prepareEditData(row)); setModalMode('edit'); setModalOpen(true); },
-      onDelete: (row) => handleDelete(row),
-      onView: (row) => { setCurrent(prepareEditData(row)); setModalMode('view'); setModalOpen(true); },
+      onEdit: canEdit
+        ? (row) => { setCurrent(prepareEditData(row)); setModalMode('edit'); setModalOpen(true); }
+        : null,
+      onDelete: canDelete ? (row) => handleDelete(row) : null,
+      onView: canView
+        ? (row) => { setCurrent(prepareEditData(row)); setModalMode('view'); setModalOpen(true); }
+        : null,
       width: '35%'
     })
-  ]), [prepareEditData]);
+  ]), [prepareEditData, canEdit, canDelete, canView]);
 
   const displayItems = useMemo(() => items || [], [items]);
 
@@ -1213,6 +1223,7 @@ const Reservacion = () => {
         subtitle="Gestiona las reservas y citas"
         icon={Calendar}
       >
+        {canCreate && (
         <motion.button
           onClick={() => { setCurrent({}); setModalMode('add'); setModalOpen(true); }}
           className="text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110"
@@ -1223,6 +1234,7 @@ const Reservacion = () => {
           <Plus className="w-4 h-4" />
           Nueva Reserva
         </motion.button>
+        )}
       </PageHeader>
 
       <Card>

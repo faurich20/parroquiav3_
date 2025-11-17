@@ -34,6 +34,8 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(50), nullable=False, default='user')
     is_active = db.Column(db.Boolean, default=True)
+    # Usuario que creó este usuario (para visibilidad jerárquica)
+    created_by = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     last_login = db.Column(db.DateTime)
@@ -116,12 +118,18 @@ class Distrito(db.Model):
     __tablename__ = 'distrito'
     distritoid = db.Column(db.Integer, primary_key=True)
     dis_nombre = db.Column(db.String, nullable=False)
+    codpostal = db.Column(db.String, nullable=True)
     provinciaid = db.Column(db.Integer, db.ForeignKey('provincia.provinciaid'), nullable=False)
 
     provincia = db.relationship('Provincia', backref=db.backref('distritos', lazy=True))
 
     def to_dict(self):
-        return { 'distritoid': self.distritoid, 'dis_nombre': self.dis_nombre, 'provinciaid': self.provinciaid }
+        return {
+            'distritoid': self.distritoid,
+            'dis_nombre': self.dis_nombre,
+            'codpostal': self.codpostal,
+            'provinciaid': self.provinciaid,
+        }
 
 
 class Departamento(db.Model):
@@ -144,6 +152,8 @@ class Parroquia(db.Model):
     distritoid = db.Column(db.Integer, db.ForeignKey('distrito.distritoid'), nullable=False)
     par_telefono1 = db.Column(db.String, nullable=False)
     par_telefono2 = db.Column(db.String)
+    par_latitud = db.Column(db.Float, nullable=True)
+    par_longitud = db.Column(db.Float, nullable=True)
 
     distrito = db.relationship('Distrito')
     personas = db.relationship('Persona', back_populates='parroquia')
@@ -151,23 +161,25 @@ class Parroquia(db.Model):
     # horarios eliminado - se obtiene mediante actos_liturgicos.horarios
 
     def to_dict(self):
-        dis = self.distrito
-        prov = dis.provincia if dis else None
-        dep = prov.departamento if prov else None
-        return {
-            'parroquiaid': self.parroquiaid,
-            'par_nombre': self.par_nombre,
-            'par_direccion': self.par_direccion,
-            'distritoid': self.distritoid,
-            'provinciaid': prov.provinciaid if prov else None,
-            'departamentoid': dep.departamentoid if dep else None,
-            'dep_nombre': dep.dep_nombre if dep else None,
-            'prov_nombre': prov.prov_nombre if prov else None,
-            'dis_nombre': dis.dis_nombre if dis else None,
-            'par_telefono1': self.par_telefono1,
-            'par_telefono2': self.par_telefono2
-        }
-
+          dis = self.distrito
+          prov = dis.provincia if dis else None
+          dep = prov.departamento if prov else None
+          return {
+              'parroquiaid': self.parroquiaid,
+              'par_nombre': self.par_nombre,
+              'par_direccion': self.par_direccion,
+              'distritoid': self.distritoid,
+              'provinciaid': prov.provinciaid if prov else None,
+              'departamentoid': dep.departamentoid if dep else None,
+              'dep_nombre': dep.dep_nombre if dep else None,
+              'prov_nombre': prov.prov_nombre if prov else None,
+              'dis_nombre': dis.dis_nombre if dis else None,
+              'codpostal': dis.codpostal if dis else None,
+              'par_telefono1': self.par_telefono1,
+              'par_telefono2': self.par_telefono2,
+              'par_latitud': self.par_latitud,
+              'par_longitud': self.par_longitud,
+          }
 
 class Persona(db.Model):
     __tablename__ = 'persona'
@@ -236,6 +248,9 @@ class Horario(db.Model):
     actoliturgicoid = db.Column(db.Integer, db.ForeignKey('actoliturgico.actoliturgicoid'), nullable=False)
     h_fecha = db.Column(db.Date, nullable=False)  # fecha específica del horario
     h_hora = db.Column(db.Time, nullable=False)   # hora específica del horario
+    # Fecha y hora de fin (opcionales)
+    h_fecha_fin = db.Column(db.Date, nullable=True)
+    h_hora_fin = db.Column(db.Time, nullable=True)
     # parroquiaid eliminado - se obtiene mediante acto_liturgico.parroquia
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -251,6 +266,8 @@ class Horario(db.Model):
             'acto_titulo': self.acto_liturgico.act_titulo if self.acto_liturgico else None,
             'h_fecha': self.h_fecha.isoformat() if self.h_fecha else None,
             'h_hora': self.h_hora.strftime('%H:%M') if self.h_hora else None,
+            'h_fecha_fin': self.h_fecha_fin.isoformat() if self.h_fecha_fin else None,
+            'h_hora_fin': self.h_hora_fin.strftime('%H:%M') if self.h_hora_fin else None,
             'parroquiaid': self.acto_liturgico.parroquiaid if self.acto_liturgico and hasattr(self.acto_liturgico, 'parroquiaid') else None,
             'parroquia_nombre': self.acto_liturgico.parroquia.par_nombre if self.acto_liturgico and self.acto_liturgico.parroquia else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,

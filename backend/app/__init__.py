@@ -6,7 +6,16 @@ from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
+import sys
 from datetime import datetime, date  # 🔧 agregado
+
+# Asegurar que stdout use UTF-8 (para logs con caracteres especiales/emojis)
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        # Si falla, continuamos con la codificación por defecto
+        pass
 
 db = SQLAlchemy()
 migrate = Migrate()

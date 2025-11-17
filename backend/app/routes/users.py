@@ -8,12 +8,14 @@ from app.models import User, Role, UserPreferences, Persona
 from datetime import datetime
 from app.constants import PERMISOS
 from app.utils.security import is_valid_email, is_strong_password
+from app.utils.permissions import permission_required
 
 users_bp = Blueprint('users', __name__)
 
 
 @users_bp.route('', methods=['GET'])
 @jwt_required()
+@permission_required('seguridad', 'seguridad_usuarios', 'seguridad_usuarios_ver')
 def get_users():
     try:
         # Obtener parámetros de paginación y búsqueda
@@ -21,8 +23,33 @@ def get_users():
         per_page = request.args.get('per_page', 100, type=int)
         search = request.args.get('search', '')
         
+        # Usuario actual (para visibilidad jerárquica)
+        current_user_id = int(get_jwt_identity())
+        current_user = User.query.get(current_user_id)
+
         # Construir query base
         query = User.query
+
+        # Regla de visibilidad:
+        # - Rol "Administrador": ve a todos
+        # - Rol "Párroco": se ve a sí mismo y a los que él creó
+        # - Otros roles: por ahora ve a todos (puedes afinar luego)
+        role_name = (current_user.role or '').lower() if current_user and current_user.role else ''
+        es_admin = role_name in ('administrador', 'admin')
+        es_parroco = role_name in ('párroco', 'parroco')
+
+        if es_parroco and not es_admin:
+            # El Párroco siempre ve:
+            # - Todos los usuarios con rol "Usuario"
+            # - A sí mismo
+            # - A los usuarios que él creó
+            query = query.filter(
+                or_(
+                    User.role == 'Usuario',
+                    User.id == current_user_id,
+                    User.created_by == current_user_id
+                )
+            )
         
         # Aplicar búsqueda si existe
         if search:
@@ -40,8 +67,18 @@ def get_users():
             error_out=False
         )
         
-        # Formatear respuesta
-        users_data = [user.to_dict() for user in users.items]
+        # Formatear respuesta (incluyendo persona si existe)
+        users_data = []
+        for u in users.items:
+            user_dict = u.to_dict()
+            try:
+                persona_row = Persona.query.filter_by(userid=u.id).first()
+                if persona_row:
+                    user_dict['persona'] = persona_row.to_dict()
+            except Exception:
+                # Si falla la carga de persona no se bloquea el listado
+                pass
+            users_data.append(user_dict)
         
         return jsonify({
             'users': users_data,
@@ -56,6 +93,7 @@ def get_users():
     
 @users_bp.route('', methods=['POST'])
 @jwt_required()
+@permission_required('seguridad', 'seguridad_usuarios', 'seguridad_usuarios_crear')
 def create_user():
     try:
         current_user_id = int(get_jwt_identity())  # 🔧 casteo a int
@@ -114,7 +152,8 @@ def create_user():
             name=name,
             email=email,
             role=role,
-            is_active=data.get('status', 'Activo') == 'Activo'
+            is_active=data.get('status', 'Activo') == 'Activo',
+            created_by=current_user_id
         )
         new_user.set_password(password)
         
@@ -174,6 +213,7 @@ def create_user():
     
 @users_bp.route('/<int:user_id>', methods=['PUT'])
 @jwt_required()
+@permission_required('seguridad', 'seguridad_usuarios', 'seguridad_usuarios_editar')
 def update_user(user_id):
     try:
         current_user_id = int(get_jwt_identity())  # 🔧 casteo a int
@@ -268,6 +308,7 @@ def update_user(user_id):
 
 @users_bp.route('/<int:user_id>/status', methods=['PUT'])
 @jwt_required()
+@permission_required('seguridad', 'seguridad_usuarios', 'seguridad_usuarios_cambiar_estado')
 def update_user_status(user_id):
     try:
         data = request.get_json()
@@ -299,6 +340,7 @@ def update_user_status(user_id):
 
 @users_bp.route('/<int:user_id>', methods=['DELETE'])
 @jwt_required()
+@permission_required('seguridad', 'seguridad_usuarios', 'seguridad_usuarios_eliminar')
 def delete_user(user_id):
     try:
         user = User.query.get(user_id)
@@ -336,6 +378,16 @@ def get_profile():
         prefs = UserPreferences.query.get(user_id)
         user_dict = user.to_dict()
         user_dict['preferences'] = prefs.to_dict() if prefs else {}
+
+        # Incluir persona (si existe) para conocer parroquia del usuario
+        try:
+            persona_row = Persona.query.filter_by(userid=user.id).first()
+            if persona_row:
+                user_dict['persona'] = persona_row.to_dict()
+        except Exception:
+            # Si falla la carga de persona no se bloquea el perfil
+            pass
+
         return jsonify({'user': user_dict}), 200
         
     except Exception as e:
@@ -371,6 +423,7 @@ def update_profile():
     
 @users_bp.route('/check-email', methods=['GET'])
 @jwt_required()
+@permission_required('seguridad', 'seguridad_usuarios')
 def check_email():
     email = request.args.get('email', '').strip().lower()
     if not email:

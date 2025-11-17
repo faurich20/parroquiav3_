@@ -52,7 +52,8 @@ CREATE TABLE IF NOT EXISTS public.users (
   created_at     TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
   last_login     TIMESTAMP WITHOUT TIME ZONE,
-  last_activity  TIMESTAMP WITHOUT TIME ZONE
+  last_activity  TIMESTAMP WITHOUT TIME ZONE,
+  created_by     INTEGER
 );
 
 -- Tokens de refresh para autenticación
@@ -97,6 +98,7 @@ CREATE TABLE IF NOT EXISTS public.provincia (
 CREATE TABLE IF NOT EXISTS public.distrito (
   distritoid   INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   dis_nombre   VARCHAR NOT NULL,
+  codpostal    VARCHAR(10),
   provinciaid  INTEGER NOT NULL REFERENCES public.provincia(provinciaid)
 );
 
@@ -111,7 +113,9 @@ CREATE TABLE IF NOT EXISTS public.parroquia (
   par_direccion  VARCHAR NOT NULL,
   distritoid     INTEGER NOT NULL REFERENCES public.distrito(distritoid),
   par_telefono1  VARCHAR NOT NULL,
-  par_telefono2  VARCHAR
+  par_telefono2  VARCHAR,
+  par_latitud    DOUBLE PRECISION,
+  par_longitud   DOUBLE PRECISION
 );
 
 -- Personas (1:1 con users por userid; pertenece a parroquia)
@@ -148,8 +152,10 @@ CREATE TABLE IF NOT EXISTS public.actoliturgico (
 CREATE TABLE IF NOT EXISTS public.horario (
   horarioid        INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   actoliturgicoid  INTEGER NOT NULL REFERENCES public.actoliturgico(actoliturgicoid) ON DELETE CASCADE,
-  h_fecha          DATE NOT NULL, -- fecha específica del horario
-  h_hora           TIME NOT NULL, -- hora específica del horario
+  h_fecha          DATE NOT NULL, -- fecha de inicio del horario
+  h_hora           TIME NOT NULL, -- hora de inicio del horario
+  h_fecha_fin      DATE,          -- fecha de fin del horario (opcional, por defecto igual a inicio)
+  h_hora_fin       TIME,          -- hora de fin del horario (opcional, por defecto igual a inicio)
   created_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
@@ -213,37 +219,7 @@ CREATE INDEX IF NOT EXISTS idx_reserva_persona ON public.reserva(personaid);
 CREATE INDEX IF NOT EXISTS idx_reserva_pago ON public.reserva(pagoid);
 -- Nota: res_estado eliminado - el estado se obtiene dinámicamente desde tabla pago (pagoid FK)
 
--- =========================================================
--- 7) DATOS POR DEFECTO E INSERTS
--- =========================================================
 
--- Insert de roles base con permisos por defecto
-INSERT INTO public.roles (name, description, permissions, is_active)
-VALUES
-  (
-    'Administrador',
-    'Administrador del sistema',
-    '[
-      "menu_principal",
-      "seguridad",
-      "personal",
-      "liturgico",
-      "contabilidad",
-      "ventas",
-      "compras",
-      "almacen",
-      "configuracion",
-      "reportes"
-    ]'::jsonb,
-    TRUE
-  ),
-  (
-    'Usuario',
-    'Usuario estándar',
-    '["menu_principal"]'::jsonb,
-    TRUE
-  )
-ON CONFLICT (name) DO UPDATE SET permissions = EXCLUDED.permissions;
 
 -- =========================================================
 -- 8) MIGRACIONES Y ALTER TABLES
@@ -659,8 +635,3 @@ ORDER BY h.h_fecha, h.h_hora;
 -- 'pagado' - Pago confirmado exitosamente
 -- 'vencido' - Tiempo límite expirado sin pago
 -- 'fallido' - Error en el proceso de pago
-
--- =========================================================
--- 13) PERMISOS (OPCIONAL)
--- =========================================================
--- ALTER TABLE public.* OWNER TO parroquia_user;  -- Ajusta propietario si deseas

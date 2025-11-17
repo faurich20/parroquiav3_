@@ -21,12 +21,19 @@ const UsersPage = () => {
     const { items: users, setItems, loading, error, createItem, updateItem, removeItem, updateStatus } = useCrud('http://localhost:5000/api/users');
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState(null);
-    const { authFetch } = useAuth();
+    const { authFetch, hasPermission, user } = useAuth();
     const [rolesList, setRolesList] = useState([]);
     const [parroquias, setParroquias] = useState([]);
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const validRoles = ['admin', 'secretaria', 'tesorero', 'colaborador', 'user'];
+
+    // Permisos finos: solo el permiso específico de acción
+    const canCreate = hasPermission('seguridad_usuarios_crear');
+    const canChangeStatus = hasPermission('seguridad_usuarios_cambiar_estado');
+    const canEdit = hasPermission('seguridad_usuarios_editar');
+    const canDelete = hasPermission('seguridad_usuarios_eliminar');
+    const canView = hasPermission('seguridad_usuarios_ver');
 
     React.useEffect(() => {
         const loadRoles = async () => {
@@ -47,6 +54,36 @@ const UsersPage = () => {
         };
         if (isModalOpen) { loadRoles(); loadParroquias(); }
     }, [isModalOpen, authFetch]);
+
+    // Determinar si el usuario autenticado es Administrador
+    const normalizedCurrentRole = (user?.role || '').toString().toLowerCase();
+    const isAdmin = normalizedCurrentRole === 'administrador' || normalizedCurrentRole === 'admin';
+
+    // Rol actual del usuario seleccionado (edición / vista)
+    const selectedUserRoleName = selectedUser
+        ? (typeof selectedUser.role === 'object'
+            ? (selectedUser.role.name || '')
+            : (selectedUser.role || ''))
+        : '';
+
+    // Lista base de roles disponibles (nombres)
+    const baseRoleNames = rolesList.length
+        ? rolesList.map(r => r.name)
+        : validRoles;
+
+    // Para usuarios que NO son administradores, ocultar roles Administrador / Párroco
+    // salvo que se esté editando un usuario que ya tenga ese rol (para mostrarlo).
+    const reservedRoleNames = ['administrador', 'admin', 'párroco', 'parroco'];
+    const selectedRoleLower = selectedUserRoleName ? selectedUserRoleName.toString().toLowerCase() : '';
+
+    const rolesForCombo = isAdmin
+        ? baseRoleNames
+        : baseRoleNames.filter(name => {
+            const n = (name || '').toString().toLowerCase();
+            const isReserved = reservedRoleNames.includes(n);
+            const isCurrentSelected = selectedRoleLower && n === selectedRoleLower;
+            return !isReserved || isCurrentSelected;
+        });
 
     // Funciones para abrir modales
     const openAddModal = () => {
@@ -162,16 +199,18 @@ const UsersPage = () => {
                 subtitle="Administra los usuarios del sistema"
                 icon={Users}
             >
-                <motion.button
-                    onClick={openAddModal}
-                    className="text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110"
-                    style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                >
-                    <Plus className="w-4 h-4" />
-                    Nuevo Usuario
-                </motion.button>
+                {canCreate && (
+                    <motion.button
+                        onClick={openAddModal}
+                        className="text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110"
+                        style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                    >
+                        <Plus className="w-4 h-4" />
+                        Nuevo Usuario
+                    </motion.button>
+                )}
             </PageHeader>
 
             <Card>
@@ -223,19 +262,21 @@ const UsersPage = () => {
                                     <span className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${String(user.status).toLowerCase() === 'activo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
                                         {String(user.status).toLowerCase() === 'activo' ? 'Activo' : 'Inactivo'}
                                     </span>
-                                    <button
-                                        className={`px-2 py-1 rounded-lg text-white text-xs font-medium transition whitespace-nowrap ${user.status === 'Activo' ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'}`}
-                                        onClick={() => handleStatusChange(user.id, user.status)}
-                                    >
-                                        {user.status === 'Activo' ? 'Dar Baja' : 'Dar Alta'}
-                                    </button>
+                                    {canChangeStatus && (
+                                        <button
+                                            className={`px-2 py-1 rounded-lg text-white text-xs font-medium transition whitespace-nowrap ${user.status === 'Activo' ? 'bg-red-500 hover:bg-red-600' : 'bg-blue-500 hover:bg-blue-600'}`}
+                                            onClick={() => handleStatusChange(user.id, user.status)}
+                                        >
+                                            {user.status === 'Activo' ? 'Dar Baja' : 'Dar Alta'}
+                                        </button>
+                                    )}
                                 </div>
                             )
                         },
                         buildActionColumn({
-                            onEdit: (row) => openEditModal(row),
-                            onDelete: (row) => requestDeleteUser(row.id),
-                            onView: (row) => openViewModal(row),
+                            onEdit: canEdit ? (row) => openEditModal(row) : null,
+                            onDelete: canDelete ? (row) => requestDeleteUser(row.id) : null,
+                            onView: canView ? (row) => openViewModal(row) : null,
                             width: '35%'
                         })
                     ];
@@ -264,7 +305,7 @@ const UsersPage = () => {
                 initialValues={selectedUser ? {
                     name: selectedUser.name || '',
                     email: selectedUser.email || '',
-                    role: typeof selectedUser.role === 'object' ? (selectedUser.role.name || 'user') : (selectedUser.role || 'user'),
+                    role: typeof selectedUser.role === 'object' ? (selectedUser.role.name || '') : (selectedUser.role || ''),
                     password: '',
                     confirmPassword: '',
                     per_nombres: selectedUser.persona?.per_nombres || selectedUser.name || '',
@@ -274,7 +315,17 @@ const UsersPage = () => {
                     fecha_nacimiento: selectedUser.persona?.fecha_nacimiento || '',
                     parroquiaid: selectedUser.persona?.parroquiaid || ''
                 } : {
-                    name: '', email: '', role: 'user', password: '', confirmPassword: '', per_nombres: '', per_apellidos: '', per_domicilio: '', per_telefono: '', fecha_nacimiento: '', parroquiaid: ''
+                    name: '',
+                    email: '',
+                    role: '', // obliga a seleccionar un rol
+                    password: '',
+                    confirmPassword: '',
+                    per_nombres: '',
+                    per_apellidos: '',
+                    per_domicilio: '',
+                    per_telefono: '',
+                    fecha_nacimiento: '',
+                    parroquiaid: ''
                 }}
                 fields={[
                     { name: 'name', label: 'Nombre de usuario o alias *', type: 'text' },
@@ -286,7 +337,13 @@ const UsersPage = () => {
                         render: (value, setValue, form, disabled) => (
                             <div key="role">
                                 <label className="block text-sm font-medium text-gray-500 mb-1">Rol *</label>
-                                <SelectorRol value={value} onChange={setValue} disabled={disabled} className="text-gray-900" roles={rolesList.length ? rolesList.map(r => r.name) : validRoles} />
+                                <SelectorRol
+                                    value={value}
+                                    onChange={setValue}
+                                    disabled={disabled}
+                                    className="text-gray-900"
+                                    roles={rolesForCombo}
+                                />
                             </div>
                         )
                     },
@@ -361,7 +418,7 @@ const UsersPage = () => {
                         if (!passwordRegex.test(v.password)) return 'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula, un número y un carácter especial';
                         if (v.password !== v.confirmPassword) return 'Las contraseñas no coinciden';
                     }
-                    const rolesValidos = rolesList.length ? rolesList.map(r => r.name) : validRoles;
+                    const rolesValidos = rolesForCombo;
                     if (!rolesValidos.includes(v.role)) return 'Rol inválido';
                     if (modalMode === 'add') {
                         if (!v.per_nombres?.trim()) return 'Los nombres de la persona son requeridos';
@@ -399,53 +456,73 @@ const UsersPage = () => {
                 }}
                 onClose={() => setIsModalOpen(false)}
                 size="xl"
-                readOnlyContent={(vals) => (
-                    <div className="space-y-6">
-                        <div className="flex items-center justify-center space-x-4 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg">
-                            <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-lg">
-                                {(selectedUser?.name || vals.name || 'U').charAt(0).toUpperCase()}
+                readOnlyContent={(vals) => {
+                    const persona = selectedUser?.persona || {};
+                    const parroquiaNombre = persona.parroquiaid
+                        ? (parroquias.find(p => p.parroquiaid === persona.parroquiaid)?.par_nombre || `Parroquia ID ${persona.parroquiaid}`)
+                        : 'Sin parroquia';
+
+                    return (
+                        <div className="space-y-6">
+                            <div className="flex items-center justify-center space-x-4 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg">
+                                <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-lg">
+                                    {(selectedUser?.name || vals.name || 'U').charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-bold text-gray-900">{selectedUser?.name || vals.name || 'Usuario sin nombre'}</h3>
+                                    <p className="text-gray-600">{selectedUser?.email || vals.email || 'Sin email'}</p>
+                                </div>
                             </div>
-                            <div>
-                                <h3 className="text-2xl font-bold text-gray-900">{selectedUser?.name || vals.name || 'Usuario sin nombre'}</h3>
-                                <p className="text-gray-600">{selectedUser?.email || vals.email || 'Sin email'}</p>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-6">
-                            <div className="space-y-4">
-                                <div className="bg-white p-4 border rounded-lg">
-                                    <label className="block text-sm font-medium text-gray-500 mb-2">Rol del usuario</label>
-                                    <div className="flex items-center">
-                                        <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-                                        <span className="text-lg font-medium text-gray-900">{typeof selectedUser?.role === 'object' ? (selectedUser?.role?.name) : (selectedUser?.role || vals.role)}</span>
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="space-y-4">
+                                    <div className="bg-white p-4 border rounded-lg">
+                                        <label className="block text-sm font-medium text-gray-500 mb-2">Rol del usuario</label>
+                                        <div className="flex items-center">
+                                            <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+                                            <span className="text-lg font-medium text-gray-900">
+                                                {typeof selectedUser?.role === 'object' ? (selectedUser?.role?.name) : (selectedUser?.role || vals.role)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white p-4 border rounded-lg">
+                                        <label className="block text-sm font-medium text-gray-500 mb-2">Estado actual</label>
+                                        <span className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${String(selectedUser?.status || 'inactivo').toLowerCase() === 'activo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                                            {String(selectedUser?.status || 'inactivo').toLowerCase() === 'activo' ? 'Activo' : 'Inactivo'}
+                                        </span>
+                                    </div>
+                                    <div className="bg-white p-4 border rounded-lg">
+                                        <label className="block text-sm font-medium text-gray-500 mb-2">Datos personales</label>
+                                        <div className="text-sm text-gray-700 space-y-1">
+                                            <p><span className="font-medium">Nombres:</span> {persona.per_nombres || '—'}</p>
+                                            <p><span className="font-medium">Apellidos:</span> {persona.per_apellidos || '—'}</p>
+                                            <p><span className="font-medium">Fecha de nacimiento:</span> {persona.fecha_nacimiento || '—'}</p>
+                                            <p><span className="font-medium">Parroquia:</span> {parroquiaNombre}</p>
+                                            <p><span className="font-medium">Domicilio:</span> {persona.per_domicilio || '—'}</p>
+                                            <p><span className="font-medium">Teléfono:</span> {persona.per_telefono || '—'}</p>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="bg-white p-4 border rounded-lg">
-                                    <label className="block text-sm font-medium text-gray-500 mb-2">Estado actual</label>
-                                    <span className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${String(selectedUser?.status || 'inactivo').toLowerCase() === 'activo' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                                        {String(selectedUser?.status || 'inactivo').toLowerCase() === 'activo' ? 'Activo' : 'Inactivo'}
-                                    </span>
+                                    <label className="block text-sm font-medium text-gray-500 mb-3">Permisos asignados ({selectedUser?.permissions?.length || 0})</label>
+                                    {selectedUser?.permissions && selectedUser.permissions.length > 0 ? (
+                                        <div className="grid grid-cols-1 gap-2">
+                                            {selectedUser.permissions.map((permission, index) => (
+                                                <div key={index} className="flex items-center p-3 bg-blue-50 rounded-lg border border-blue-100">
+                                                    <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                                                    <span className="text-sm text-blue-800 font-medium">{permission}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center p-3 bg-gray-50 rounded-lg">
+                                            <span className="text-gray-500 italic">No hay permisos asignados</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
-                            <div className="bg-white p-4 border rounded-lg">
-                                <label className="block text-sm font-medium text-gray-500 mb-3">Permisos asignados ({selectedUser?.permissions?.length || 0})</label>
-                                {selectedUser?.permissions && selectedUser.permissions.length > 0 ? (
-                                    <div className="grid grid-cols-1 gap-2">
-                                        {selectedUser.permissions.map((permission, index) => (
-                                            <div key={index} className="flex items-center p-3 bg-blue-50 rounded-lg border border-blue-100">
-                                                <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
-                                                <span className="text-sm text-blue-800 font-medium">{permission}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center p-3 bg-gray-50 rounded-lg">
-                                        <span className="text-gray-500 italic">No hay permisos asignados</span>
-                                    </div>
-                                )}
-                            </div>
                         </div>
-                    </div>
-                )}
+                    );
+                }}
             />
 
             {/* Diálogo de confirmación */}

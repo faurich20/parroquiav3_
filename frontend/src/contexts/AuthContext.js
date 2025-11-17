@@ -28,10 +28,10 @@ export const AuthProvider = ({ children }) => {
   const aMs = (config) => (config.minutos * 60 + config.segundos) * 1000;
 
   // Constantes calculadas (NO MODIFICAR)
-  const ACCESS_TOKEN_LIFETIME = aMs(TIEMPO_CONFIG.TOKEN_DURACION);
-  const REFRESH_BEFORE_EXPIRY = aMs(TIEMPO_CONFIG.REFRESH_ANTICIPADO);
-  const INACTIVITY_WARNING = aMs(TIEMPO_CONFIG.AVISO_INACTIVIDAD);
-  const INACTIVITY_TIMEOUT = aMs(TIEMPO_CONFIG.LOGOUT_INACTIVIDAD);
+  const ACCESS_TOKEN_LIFETIME = aMs(TIEMPO_CONFIG.TOKEN_DURACION); 
+  const REFRESH_BEFORE_EXPIRY = aMs(TIEMPO_CONFIG.REFRESH_ANTICIPADO); 
+  const INACTIVITY_WARNING = aMs(TIEMPO_CONFIG.AVISO_INACTIVIDAD); 
+  const INACTIVITY_TIMEOUT = aMs(TIEMPO_CONFIG.LOGOUT_INACTIVIDAD); 
   const COUNTDOWN_SECONDS = Math.floor((INACTIVITY_TIMEOUT - INACTIVITY_WARNING) / 1000);
 
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
@@ -488,6 +488,30 @@ export const AuthProvider = ({ children }) => {
   }, [user]);
 
   // ========================
+  // 🔄 reloadProfile: recargar perfil desde backend
+  // ========================
+  const reloadProfile = useCallback(async () => {
+    try {
+      const accessToken = localStorage.getItem('access_token');
+      if (!accessToken) return;
+
+      const resp = await fetch('http://localhost:5000/api/users/profile', {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const perfil = data?.user || data;
+      if (perfil) {
+        setUser(perfil);
+        localStorage.setItem('user', JSON.stringify(perfil));
+      }
+    } catch (e) {
+      console.error('Error recargando perfil:', e);
+    }
+  }, []);
+
+  // ========================
   // 🌐 authFetch con lock anti-race-condition
   // ========================
   const authFetch = useCallback(async (url, options = {}) => {
@@ -535,10 +559,11 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     hasPermission,
+    reloadProfile,
     loading,
     authFetch,
     extendSession
-  }), [user, login, logout, hasPermission, loading, authFetch, extendSession]);
+  }), [user, login, logout, hasPermission, reloadProfile, loading, authFetch, extendSession]);
 
   return (
     <AuthContext.Provider value={contextValue}>

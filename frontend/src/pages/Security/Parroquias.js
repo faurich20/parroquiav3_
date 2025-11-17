@@ -10,16 +10,33 @@ import useCrud from '../../hooks/useCrud';
 import { buildActionColumn } from '../../components/Common/ActionColumn';
 import { useAuth } from '../../contexts/AuthContext';
 
-// Función para obtener coordenadas aproximadas por distrito
-const getCoordenadasPorDistrito = (distrito) => {
-  const coordenadasDistritos = {
-    'LAMBAYEQUE': { lat: -6.7063, lng: -79.9066 },
-    'CHICLAYO': { lat: -6.7651, lng: -79.8542 },
-    'JOSE LEONARDO ORTIZ': { lat: -6.7596, lng: -79.8538 },
-    // Agregar más distritos según sea necesario
-  };
+// Mapa usando solo coordenadas exactas guardadas
+const ParroquiaMap = ({ latitud, longitud }) => {
+  if (typeof latitud !== 'number' || typeof longitud !== 'number') {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-gray-500 italic">
+        Sin coordenadas registradas
+      </div>
+    );
+  }
 
-  return coordenadasDistritos[distrito] || { lat: -6.7714, lng: -79.8409 }; // Centro de Lambayeque por defecto
+  const used = { lat: latitud, lng: longitud };
+  const bboxPadding = 0.05;
+  const bbox = `${used.lng - bboxPadding},${used.lat - bboxPadding},${used.lng + bboxPadding},${used.lat + bboxPadding}`;
+  const mapsSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${used.lat},${used.lng}`;
+
+  return (
+    <iframe
+      title="Mapa de la Parroquia"
+      src={mapsSrc}
+      width="100%"
+      height="100%"
+      style={{ border: 0 }}
+      allowFullScreen=""
+      loading="lazy"
+      referrerPolicy="no-referrer-when-downgrade"
+    />
+  );
 };
 
 const ParroquiasPage = () => {
@@ -223,21 +240,57 @@ const ParroquiasPage = () => {
     },
     { name: 'par_telefono1', label: 'Teléfono 1', type: 'text', placeholder: 'Teléfono principal' },
     { name: 'par_telefono2', label: 'Teléfono 2', type: 'text', placeholder: 'Teléfono alterno (opcional)' },
-  ]), [departamentos, provincias, distritos, selDepartamento, selProvincia]);
+    {
+      name: 'par_coordenadas',
+      label: 'Coordenadas*',
+      type: 'text',
+      placeholder: '-0.000000, -0.000000',
+      getInitialValue: () => {
+        const lat = current?.par_latitud;
+        const lng = current?.par_longitud;
+        if (lat == null || lng == null) return '';
+        return `${lat}, ${lng}`;
+      },
+    },
+  ]), [departamentos, provincias, distritos, selDepartamento, selProvincia, current]);
 
   const validate = (v) => {
     if (!v.par_nombre) return 'Ingrese el nombre';
     if (!v.par_direccion) return 'Ingrese la dirección';
     if (!v.par_telefono1) return 'Ingrese el teléfono principal';
     if (!v.distritoid) return 'Seleccione el distrito';
+    if (!v.par_coordenadas) return 'Ingrese las coordenadas';
+
+    const parts = v.par_coordenadas.split(',').map(s => s.trim());
+    if (parts.length !== 2) return 'Coordenadas inválidas. Use formato "lat, lng"';
+    const lat = parseFloat(parts[0]);
+    const lng = parseFloat(parts[1]);
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      return 'Coordenadas inválidas. Use formato "lat, lng"';
+    }
+
     return '';
   };
 
   const handleSubmit = async (values) => {
     const payload = { ...values };
+
+    if (payload.par_coordenadas) {
+      const parts = payload.par_coordenadas.split(',').map(s => s.trim());
+      const lat = parseFloat(parts[0]);
+      const lng = parseFloat(parts[1]);
+      if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
+        payload.par_latitud = lat;
+        payload.par_longitud = lng;
+      }
+    }
+
     if (payload.distritoid) payload.distritoid = Number(payload.distritoid);
+
     delete payload.departamentoid;
     delete payload.provinciaid;
+    delete payload.par_coordenadas;
+
     if (modalMode === 'add') return await createItem(payload);
     if (modalMode === 'edit') return await updateItem(current?.parroquiaid, payload);
     return { success: false, error: 'Modo no soportado' };
@@ -338,43 +391,35 @@ const ParroquiasPage = () => {
         validate={validate}
         onSubmit={handleSubmit}
         onClose={() => setIsModalOpen(false)}
-        size="xl"
+        size="xl"       
         readOnlyContent={(vals) => {
           const nombre = vals?.par_nombre || current?.par_nombre || '';
           const direccion = vals?.par_direccion || current?.par_direccion || '';
           const distrito = vals?.dis_nombre || current?.dis_nombre || '';
           const provincia = vals?.prov_nombre || current?.prov_nombre || '';
           const departamento = vals?.dep_nombre || current?.dep_nombre || '';
-          const partes = [direccion, distrito, provincia, departamento, 'Perú'].filter(Boolean);
-          const coords = getCoordenadasPorDistrito(distrito);
-          const bboxPadding = 0.05; // Padding para el bbox
-          const bbox = `${coords.lng - bboxPadding},${coords.lat - bboxPadding},${coords.lng + bboxPadding},${coords.lat + bboxPadding}`;
-          const mapsSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${coords.lat},${coords.lng}`;
+
+          const latRaw = vals?.par_latitud ?? current?.par_latitud;
+          const lngRaw = vals?.par_longitud ?? current?.par_longitud;
+          const latitud = latRaw != null ? Number(latRaw) : null;
+          const longitud = lngRaw != null ? Number(lngRaw) : null;
+
           return (
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Mapa en el lado izquierdo (2/3 del espacio) */}
                 <div className="md:col-span-2 bg-white p-3 border rounded-lg flex flex-col">
-                  <label className="block text-sm font-medium text-gray-500 mb-2">🗺️ Ubicación</label>
-                  {partes.length ? (
+                  <label className="block text-sm font-medium text-gray-500 mb-2">Ubicación</label>
+                  {latitud != null && longitud != null ? (
                     <div className="w-full mx-auto rounded overflow-hidden" style={{ height: 480 }}>
-                      <iframe
-                        title="Mapa de la Parroquia"
-                        src={mapsSrc}
-                        width="100%"
-                        height="100%"
-                        style={{ border: 0 }}
-                        allowFullScreen=""
-                        loading="lazy"
-                        referrerPolicy="no-referrer-when-downgrade"
-                      />
+                      <ParroquiaMap latitud={latitud} longitud={longitud} />
                       <div className="mt-2 text-xs text-gray-600 text-center">
-                        📍 Ubicación aproximada en {distrito} - {provincia}, {departamento}
+                        Ubicación exacta en {distrito} - {provincia}, {departamento}
                       </div>
                     </div>
                   ) : (
                     <div className="text-gray-500 italic h-64 flex items-center justify-center">
-                      Sin datos suficientes para mapa
+                      Sin coordenadas registradas
                     </div>
                   )}
                 </div>
@@ -382,35 +427,37 @@ const ParroquiasPage = () => {
                 {/* Datos en el lado derecho (1/3 del espacio) */}
                 <div className="space-y-3">
                   <div className="bg-white p-3 border rounded-lg">
-                    <label className="block text-sm font-medium text-gray-500 mb-1">📋 Nombre</label>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Nombre</label>
                     <div className="text-gray-900 font-medium text-sm">{nombre || '-'}</div>
                   </div>
 
                   <div className="bg-white p-3 border rounded-lg">
-                    <label className="block text-sm font-medium text-gray-500 mb-1">📍 Dirección</label>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Dirección</label>
                     <div className="text-gray-900 font-medium text-sm">{direccion || '-'}</div>
                   </div>
 
                   <div className="bg-white p-3 border rounded-lg">
-                    <label className="block text-sm font-medium text-gray-500 mb-1">🏛️ Departamento</label>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Departamento</label>
                     <div className="text-gray-900 font-medium text-sm">{departamento || '-'}</div>
                   </div>
 
                   <div className="bg-white p-3 border rounded-lg">
-                    <label className="block text-sm font-medium text-gray-500 mb-1">🏛️ Provincia</label>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Provincia</label>
                     <div className="text-gray-900 font-medium text-sm">{provincia || '-'}</div>
                   </div>
 
                   <div className="bg-white p-3 border rounded-lg">
-                    <label className="block text-sm font-medium text-gray-500 mb-1">🏛️ Distrito</label>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Distrito</label>
                     <div className="text-gray-900 font-medium text-sm">{distrito || '-'}</div>
                   </div>
 
                   <div className="bg-white p-3 border rounded-lg">
-                    <label className="block text-sm font-medium text-gray-500 mb-1">📞 Teléfonos</label>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Teléfonos</label>
                     <div className="text-gray-900 font-medium text-sm">
                       {(vals?.par_telefono1 || current?.par_telefono1 || '-') +
-                       ((vals?.par_telefono2 || current?.par_telefono2) ? ` / ${vals?.par_telefono2 || current?.par_telefono2}` : '')}
+                        ((vals?.par_telefono2 || current?.par_telefono2)
+                          ? ` / ${vals?.par_telefono2 || current?.par_telefono2}`
+                          : '')}
                     </div>
                   </div>
 
@@ -432,13 +479,11 @@ const ParroquiasPage = () => {
       />
 
       <DialogoConfirmacion
-        abierto={confirmOpen}
-        titulo="Eliminar parroquia"
-        mensaje="¿Estás seguro de eliminar esta parroquia? Esta acción no se puede deshacer."
-        onConfirmar={confirmDelete}
-        onCancelar={() => { setConfirmOpen(false); setDeleteTarget(null); }}
-        confirmText="Eliminar"
-        cancelText="Cancelar"
+        open={confirmOpen}
+        title="Confirmar eliminación"
+        message="¿Está seguro de eliminar esta parroquia? Esta acción no se puede deshacer."
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={confirmDelete}
       />
     </div>
   );

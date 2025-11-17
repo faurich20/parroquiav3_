@@ -1,7 +1,6 @@
 import os
 import sys
 import psycopg2
-from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 # Agregar el directorio padre al path
@@ -72,9 +71,9 @@ class DatabaseManager:
         """Verifica que se pueda conectar a la base de datos específica"""
         try:
             conn = psycopg2.connect(
-                host='localhost',
-                port=5432,
-                user='postgres',
+                host=self.db_config['host'],
+                port=self.db_config['port'],
+                user=self.db_config['user'],
                 password=self.db_config['password'],
                 database='parroquia_db',
                 options='-c client_encoding=UTF8'
@@ -177,7 +176,7 @@ class DatabaseManager:
                     print("✅ Admin actualizado con hash bcrypt válido")
                 else:
                     # Crear si no existe (rol/admin por defecto)
-                    u = User(name='Admin', email='admin@parroquia.com', role='admin', permissions=[])
+                    u = User(name='Admin', email='admin@parroquia.com', role='Administrador')
                     u.password_hash = hash_password('Admin123!')
                     db.session.add(u)
                     db.session.commit()

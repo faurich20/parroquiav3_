@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 import traceback
 
 from app import db, jwt
-from app.models import User, RefreshToken
+from app.models import User, RefreshToken, Role
 from app.utils.security import is_valid_email, is_strong_password
 
 auth_bp = Blueprint('auth', __name__)
@@ -85,11 +85,15 @@ def login():
         db.session.commit()
         
         print(" Login exitoso - Tokens creados")
+
+        # Incluir información básica del usuario en la respuesta inicial
+        user_dict = user.to_dict()
+
         return jsonify({
             'message': 'Login exitoso',
             'access_token': access_token,
             'refresh_token': refresh_token,
-            'user': user.to_dict()
+            'user': user_dict
         }), 200
         
     except Exception as e:
@@ -266,4 +270,3 @@ def test_auth():
         'status': 'ok',
         'timestamp': datetime.now().isoformat()
     }), 200
-

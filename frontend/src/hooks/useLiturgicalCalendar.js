@@ -13,6 +13,11 @@ export default function useLiturgicalCalendar() {
     setError(null);
     try {
       const response = await authFetch('http://localhost:5000/api/liturgical/calendario');
+      if (response.status === 403) {
+        setError('No autorizado para ver el calendario litúrgico');
+        setItems([]);
+        return;
+      }
       const data = await response.json();
       setItems(data.items || []);
     } catch (err) {
@@ -28,6 +33,10 @@ export default function useLiturgicalCalendar() {
     setError(null);
     try {
       const response = await authFetch(`http://localhost:5000/api/liturgical/horarios/fecha/${date}`);
+      if (response.status === 403) {
+        setError('No autorizado para ver horarios para esta fecha');
+        return [];
+      }
       const data = await response.json();
       return data.items || [];
     } catch (err) {

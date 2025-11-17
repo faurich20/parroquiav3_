@@ -53,6 +53,39 @@ const ProtectedRoutes = () => {
   );
 };
 
+// Guard de permiso por ruta
+const RequirePermission = ({ perm, children }) => {
+  const { hasPermission } = useAuth();
+
+  if (!perm) return children;
+
+  // Permitir que perm sea string o array de permisos
+  const permsArray = Array.isArray(perm) ? perm : [perm];
+  const allowed = permsArray.some((p) => hasPermission(p));
+
+  return allowed ? children : <Navigate to="/bienvenida" replace />;
+};
+
+// Entrada de módulo litúrgico: redirige a la primera subruta permitida
+const LiturgicalEntry = () => {
+  const { hasPermission } = useAuth();
+
+  const canActos =
+    hasPermission('liturgico') ||
+    hasPermission('liturgico_actos') ||
+    hasPermission('liturgico_actos_ver');
+  const canHorarios = hasPermission('liturgico') || hasPermission('liturgico_horarios');
+  const canReservas = hasPermission('liturgico') || hasPermission('liturgico_reservas');
+  const canReportes = hasPermission('liturgico') || hasPermission('liturgico_reportes');
+
+  if (canActos) return <Navigate to="/liturgico/gestionar" replace />;
+  if (canHorarios) return <Navigate to="/liturgico/horarios" replace />;
+  if (canReservas) return <Navigate to="/liturgico/reservas" replace />;
+  if (canReportes) return <Navigate to="/liturgico/reportes" replace />;
+
+  return <Navigate to="/bienvenida" replace />;
+};
+
 const App = () => {
   return (
     <Router>
@@ -63,22 +96,68 @@ const App = () => {
             <Route index element={<Navigate to="/bienvenida" />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/bienvenida" element={<Bienvenida />} />
-            <Route path="/personal" element={<Personal />} />
-            <Route path="/contabilidad" element={<Accounting />} />
-            <Route path="/ventas" element={<Sales />} />
-            <Route path="/compras" element={<Purchases />} />
-            <Route path="/almacen" element={<Warehouse />} />
-            <Route path="/configuracion" element={<Configuration />} />
-            <Route path="/seguridad/usuarios" element={<UsersPage />} />
-            <Route path="/seguridad/roles" element={<RolesPage />} />
-            <Route path="/seguridad/permisos" element={<PermissionsPage />} />
-            <Route path="/seguridad/parroquias" element={<ParroquiasPage />} />
-            <Route path="/liturgico/gestionar" element={<ActoLiturgico />} />
-            <Route path="/liturgico/horarios" element={<Horarios />} />
-            <Route path="/liturgico/reservas" element={<Reservacion />} />
-            <Route path="/liturgico/reportes" element={<LiturgicalReports />} />
-            <Route path="/reportes/gerenciales" element={<ManagementReports />} />
-            <Route path="/reportes/transaccionales" element={<TransactionReports />} />
+            <Route path="/personal" element={<RequirePermission perm="personal"><Personal /></RequirePermission>} />
+            <Route path="/contabilidad" element={<RequirePermission perm="contabilidad"><Accounting /></RequirePermission>} />
+            <Route path="/ventas" element={<RequirePermission perm="ventas"><Sales /></RequirePermission>} />
+            <Route path="/compras" element={<RequirePermission perm="compras"><Purchases /></RequirePermission>} />
+            <Route path="/almacen" element={<RequirePermission perm="almacen"><Warehouse /></RequirePermission>} />
+            <Route path="/configuracion" element={<RequirePermission perm="configuracion"><Configuration /></RequirePermission>} />
+            <Route path="/seguridad/usuarios" element={<RequirePermission perm="seguridad"><UsersPage /></RequirePermission>} />
+            <Route path="/seguridad/roles" element={<RequirePermission perm="seguridad"><RolesPage /></RequirePermission>} />
+            <Route path="/seguridad/permisos" element={<RequirePermission perm="seguridad"><PermissionsPage /></RequirePermission>} />
+            <Route path="/seguridad/parroquias" element={<RequirePermission perm="seguridad"><ParroquiasPage /></RequirePermission>} />
+            <Route
+              path="/liturgico"
+              element={
+                <RequirePermission
+                  perm={[
+                    'liturgico',
+                    'liturgico_actos',
+                    'liturgico_horarios',
+                    'liturgico_reservas',
+                    'liturgico_reportes',
+                  ]}
+                >
+                  <LiturgicalEntry />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/liturgico/gestionar"
+              element={
+                <RequirePermission
+                  perm={['liturgico', 'liturgico_actos', 'liturgico_actos_ver']}
+                >
+                  <ActoLiturgico />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/liturgico/horarios"
+              element={
+                <RequirePermission perm={['liturgico', 'liturgico_horarios']}>
+                  <Horarios />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/liturgico/reservas"
+              element={
+                <RequirePermission perm={['liturgico', 'liturgico_reservas']}>
+                  <Reservacion />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/liturgico/reportes"
+              element={
+                <RequirePermission perm={['liturgico', 'liturgico_reportes']}>
+                  <LiturgicalReports />
+                </RequirePermission>
+              }
+            />
+            <Route path="/reportes/gerenciales" element={<RequirePermission perm="reportes"><ManagementReports /></RequirePermission>} />
+            <Route path="/reportes/transaccionales" element={<RequirePermission perm="reportes"><TransactionReports /></RequirePermission>} />
           </Route>
         </Routes>
       </AuthProvider>

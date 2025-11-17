@@ -17,8 +17,40 @@ VALUES
     '[
       "menu_principal",
       "seguridad",
+      "seguridad_usuarios",
+      "seguridad_roles",
+      "seguridad_permisos",
+      "seguridad_parroquias",
+      "seguridad_roles_ver",
+      "seguridad_roles_crear",
+      "seguridad_roles_editar",
+      "seguridad_roles_eliminar",
+      "seguridad_roles_cambiar_estado",
+      "seguridad_usuarios_ver",
+      "seguridad_usuarios_crear",
+      "seguridad_usuarios_editar",
+      "seguridad_usuarios_eliminar",
+      "seguridad_usuarios_cambiar_estado",
+      "seguridad_parroquias_ver",
+      "seguridad_parroquias_crear",
+      "seguridad_parroquias_editar",
+      "seguridad_parroquias_eliminar",
       "personal",
       "liturgico",
+      "liturgico_actos",
+      "liturgico_actos_ver",
+      "liturgico_actos_crear",
+      "liturgico_actos_editar",
+      "liturgico_actos_eliminar",
+      "liturgico_horarios",
+      "liturgico_reservas",
+      "liturgico_reservas_ver",
+      "liturgico_reservas_crear",
+      "liturgico_reservas_editar",
+      "liturgico_reservas_eliminar",
+      "liturgico_reportes",
+      "reportes_gerenciales",
+      "reportes_transaccionales",
       "contabilidad",
       "ventas",
       "compras",
@@ -33,416 +65,366 @@ VALUES
     'Usuario estándar',
     '["menu_principal"]'::jsonb,
     TRUE
+  ),
+  (
+    'Tesorero',
+    'Responsable de la administración económica y control de pagos de la parroquia.',
+    '[
+      "menu_principal",
+      "contabilidad",
+      "pagos",
+      "pagos_ver",
+      "pagos_confirmar",
+      "pagos_reportes"
+    ]'::jsonb,
+    TRUE
+  ),
+  (
+    'Párroco',
+    'Director pastoral de la parroquia y responsable principal de las celebraciones.',
+    '[
+      "menu_principal",
+      "liturgico",
+      "liturgico_actos",
+      "liturgico_actos_ver",
+      "liturgico_actos_crear",
+      "liturgico_actos_editar",
+      "liturgico_horarios",
+      "liturgico_reservas",
+      "liturgico_reportes",
+      "personal"
+    ]'::jsonb,
+    TRUE
+  ),
+  (
+    'Vicario',
+    'Asistente del párroco en la celebración de actos y atención pastoral.',
+    '[
+      "menu_principal",
+      "liturgico",
+      "liturgico_actos",
+      "liturgico_actos_ver",
+      "liturgico_horarios",
+      "liturgico_reservas_ver"
+    ]'::jsonb,
+    TRUE
+  ),
+  (
+    'Diácono',
+    'Ministro asistente en misas, bautizos y servicios litúrgicos.',
+    '[
+      "menu_principal",
+      "liturgico",
+      "liturgico_actos_ver",
+      "liturgico_horarios",
+      "liturgico_reservas_ver"
+    ]'::jsonb,
+    TRUE
   )
 ON CONFLICT (name) DO UPDATE SET permissions = EXCLUDED.permissions;
 
 -- Usuarios (password_hash = bcrypt('Admin123!'))
 INSERT INTO public.users (name, email, password_hash, role, is_active)
 VALUES
-  ('admin', 'admin@parroquia.com', '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Administrador', TRUE),
-  ('mariaperez', 'maria@example.com', '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Usuario', TRUE),
-  ('juanlopez',  'juan@example.com',  '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Usuario', TRUE)
+  ('admin',    'admin@parroquia.com',   '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Administrador', TRUE),
+  -- Párrocos, Vicarios y Tesoreros iniciales
+  ('parroco1', 'parroco1@parroquia.com','$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Párroco',      TRUE),
+  ('vicario1', 'vicario1@parroquia.com','$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Vicario',      TRUE),
+  ('tesorero1','tesorero1@parroquia.com','$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu','Tesorero',    TRUE),
+  ('parroco2', 'parroco2@parroquia.com','$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Párroco',      TRUE),
+  ('vicario2', 'vicario2@parroquia.com','$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Vicario',      TRUE),
+  ('tesorero2','tesorero2@parroquia.com','$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu','Tesorero',    TRUE),
+  -- 10 usuarios estándar
+  ('user1',   'user1@parroquia.com',   '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Usuario', TRUE),
+  ('user2',   'user2@parroquia.com',   '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Usuario', TRUE),
+  ('user3',   'user3@parroquia.com',   '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Usuario', TRUE),
+  ('user4',   'user4@parroquia.com',   '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Usuario', TRUE),
+  ('user5',   'user5@parroquia.com',   '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Usuario', TRUE),
+  ('user6',   'user6@parroquia.com',   '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Usuario', TRUE),
+  ('user7',   'user7@parroquia.com',   '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Usuario', TRUE),
+  ('user8',   'user8@parroquia.com',   '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Usuario', TRUE),
+  ('user9',   'user9@parroquia.com',   '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Usuario', TRUE),
+  ('user10',  'user10@parroquia.com',  '$2b$12$1nTQe1m3u1zZ2S3yXwqOaO2RNQ8c7vS5v1lqUj3m0EZv6m2mJwqBu', 'Usuario', TRUE)
 ON CONFLICT (email) DO NOTHING;
+
 
 -- =========================================================
 -- GEOGRAFÍA (Departamento, Provincia, Distrito)
 -- =========================================================
-
--- Departamento
+-- Departamento LAMBAYEQUE
 INSERT INTO public.departamento (dep_nombre)
 VALUES ('LAMBAYEQUE')
 ON CONFLICT DO NOTHING;
 
--- Provincia (LAMBAYEQUE)
+-- Provincias del departamento LAMBAYEQUE
 INSERT INTO public.provincia (prov_nombre, departamentoid)
-SELECT 'LAMBAYEQUE', d.departamentoid
-FROM public.departamento d
-WHERE d.dep_nombre = 'LAMBAYEQUE'
+SELECT v.prov_nombre, d.departamentoid
+FROM (
+  VALUES
+    ('LAMBAYEQUE'), 
+    ('FERREÑAFE'),
+    ('CHICLAYO')
+) AS v(prov_nombre)
+JOIN public.departamento d ON d.dep_nombre = 'LAMBAYEQUE'
 ON CONFLICT DO NOTHING;
 
--- Distritos (LAMBAYEQUE, CHICLAYO, JOSE LEONARDO ORTIZ)
+-- Distritos del departamento/provincia: (1)/(1) LAMBAYEQUE
+INSERT INTO public.distrito (dis_nombre, codpostal, provinciaid)
+SELECT v.dis_nombre, v.codpostal, p.provinciaid
+FROM (
+  VALUES
+    ('LAMBAYEQUE',14013),
+    ('CHÓCHOPE',14220),
+    ('ÍLLIMO',14131),
+    ('JAYANCA',14151),
+    ('MOCHUMÍ',14111),
+    ('MÓRROPE',14161),
+    ('MOTUPE',14201),
+    ('OLMOS',14211),
+    ('PACORA',14141),
+    ('SALAS',14231),
+    ('SAN JOSÉ',14051),
+    ('TÚCUME',14121)
+) AS v(dis_nombre, codpostal)
+JOIN public.provincia p ON p.prov_nombre = 'LAMBAYEQUE'
+ON CONFLICT DO NOTHING;
+
+-- Distritos del departamento/provincia: (1)/(2) FERREÑAFE
 INSERT INTO public.distrito (dis_nombre, provinciaid)
 SELECT v.dis_nombre, p.provinciaid
 FROM (
   VALUES
-    ('LAMBAYEQUE'),
-    ('CHICLAYO'),
-    ('JOSE LEONARDO ORTIZ')
+    ('FERREÑAFE',14311),
+    ('CAÑARIS',14501),
+    ('INCAHUASI',14401),
+    ('MANUEL ANTONIO MESONES MURO',14330),
+    ('PÍTIPO',14341),
+    ('PUEBLO NUEVO',14310)
 ) AS v(dis_nombre)
-JOIN public.provincia p ON p.prov_nombre = 'LAMBAYEQUE'
+JOIN public.provincia p ON p.prov_nombre = 'FERREÑAFE'
+ON CONFLICT DO NOTHING;
+
+-- Distritos del departamento/provincia: (1)/(3) CHICLAYO
+INSERT INTO public.distrito (dis_nombre, provinciaid)
+SELECT v.dis_nombre, p.provinciaid
+FROM (
+  VALUES
+    ('CHICLAYO',14001 ),
+    ('CAYALTÍ',14721),
+    ('CHONGOYAPE',14621),	
+    ('ETEN',14821),
+    ('JOSÉ LEONARDO ORTIZ',14002),
+    ('LA VICTORIA',14007),
+    ('LAGUNAS',14701),
+    ('MONSEFÚ',14831),
+	('MOCUPE',14701),
+    ('NUEVA ARICA',14730),
+    ('OYOTÚN',14741),
+    ('PÁTAPO',14611),
+    ('PICSI',14301),
+    ('PIMENTEL',14012),
+    ('POMALCA',14006),
+    ('PUCALÁ',14631),
+    ('PUERTO ETEN',14810),
+    ('REQUE',14801),
+    ('SANTA ROSA',14841),
+    ('TUMÁN',14601),
+    ('ZAÑA',14711)
+) AS v(dis_nombre)
+JOIN public.provincia p ON p.prov_nombre = 'CHICLAYO'
 ON CONFLICT DO NOTHING;
 
 -- =========================================================
--- PARROQUIAS (NOTA: NO tiene created_at/updated_at)
+-- PARROQUIAS
 -- =========================================================
 
-INSERT INTO public.parroquia (par_nombre, par_direccion, distritoid, par_telefono1, par_telefono2)
-SELECT v.par_nombre, v.par_direccion, d.distritoid, v.tel1, v.tel2
+INSERT INTO public.parroquia (
+  par_nombre,
+  par_direccion,
+  distritoid,
+  par_telefono1,
+  par_telefono2,
+  par_latitud,
+  par_longitud
+)
+  SELECT
+    v.par_nombre,
+    v.par_direccion,
+    d.distritoid,
+    v.tel1,
+    v.tel2,
+    v.lat,
+    v.lng
 FROM (
   VALUES
-    ('Parroquia Catedral de Lambayeque', '2 de Mayo 555', 'LAMBAYEQUE', '074-200001', NULL),
-    ('Parroquia San Antonio de Chiclayo', 'Av. Belaunde 123',  'CHICLAYO',   '074-200002', '074-200102'),
-    ('Parroquia Sagrado Corazón - JLO',   'Av. Leguia 456',    'JOSE LEONARDO ORTIZ', '074-200003', NULL)
-) AS v(par_nombre, par_direccion, distrito_nom, tel1, tel2)
+    ('Parroquia San Pedro', 'Calle 8 de Octubre 551', 'LAMBAYEQUE', '074-200001', NULL,-6.703369592601066, -79.90559430646195),
+    ('Parroquia Nuestra Señora de Guadalupe', 'Av. los Tréboles 200',  'CHICLAYO',   '074-200002', '074-200102',-6.759338914380556, -79.85695274646504),
+    ('Parroquia Señor de la Justicia',   'P.j Señor de la Justicia',    'FERREÑAFE', '074-200003', NULL,-6.632633138804596, -79.7860044692524)
+  ) AS v(par_nombre, par_direccion, distrito_nom, tel1, tel2, lat, lng)
 JOIN public.distrito d ON d.dis_nombre = v.distrito_nom
 ON CONFLICT DO NOTHING;
 
 -- =========================================================
--- PERSONAS (TODOS los usuarios deben tener una persona asociada)
+-- PERSONAS (asociadas a usuarios semilla)
 -- =========================================================
 
 -- Persona asociada al admin
 INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
 SELECT u.id, 'Jose Juan', 'Pérez López', 'Av. Admin 100', '999999999', DATE '1980-01-01', pr.parroquiaid, NOW(), NOW()
 FROM public.users u
-JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Catedral de Lambayeque'
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia San Pedro'
 WHERE u.email = 'admin@parroquia.com'
 ON CONFLICT DO NOTHING;
 
--- Persona asociada a mariaperez
+-- Párroco 1 (Parroquia San Pedro)
 INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
-SELECT u.id, 'María', 'Pérez', 'Calle 1', '987654321', DATE '1990-05-10', pr.parroquiaid, NOW(), NOW()
+SELECT u.id, 'Miguel', 'Gomez Ruiz', 'Jr. Parroco 101', '987111222', DATE '1985-02-10', pr.parroquiaid, NOW(), NOW()
 FROM public.users u
-JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia San Antonio de Chiclayo'
-WHERE u.email = 'maria@example.com'
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia San Pedro'
+WHERE u.email = 'parroco1@parroquia.com'
 ON CONFLICT DO NOTHING;
 
--- Persona asociada a juanlopez
+-- Vicario 1 (Parroquia San Pedro)
 INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
-SELECT u.id, 'Juan', 'López', 'Av. 2', '912345678', DATE '1988-07-22', pr.parroquiaid, NOW(), NOW()
+SELECT u.id, 'Luis', 'Ramirez Soto', 'Jr. Vicario 202', '987222333', DATE '1990-03-15', pr.parroquiaid, NOW(), NOW()
 FROM public.users u
-JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Sagrado Corazón - JLO'
-WHERE u.email = 'juan@example.com'
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia San Pedro'
+WHERE u.email = 'vicario1@parroquia.com'
 ON CONFLICT DO NOTHING;
 
--- Personas sin usuario asociado (feligreses)
+-- Tesorero 1 (Parroquia San Pedro)
 INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
-SELECT NULL, 'Ana', 'García', 'Calle 3', '923456789', DATE '1992-03-15', pr.parroquiaid, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
+SELECT u.id, 'Ana', 'Lopez Diaz', 'Av. Tesoreria 303', '987333444', DATE '1992-07-20', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia San Pedro'
+WHERE u.email = 'tesorero1@parroquia.com'
+ON CONFLICT DO NOTHING;
+
+-- Párroco 2 (Parroquia Nuestra Señora de Guadalupe)
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
+SELECT u.id, 'Juan', 'Martinez Rojas', 'Av. Parroco 404', '987444555', DATE '1983-05-05', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Nuestra Señora de Guadalupe'
+WHERE u.email = 'parroco2@parroquia.com'
+ON CONFLICT DO NOTHING;
+
+-- Vicario 2 (Parroquia Nuestra Señora de Guadalupe)
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
+SELECT u.id, 'Carlos', 'Vargas Peña', 'Jr. Vicario 505', '987555666', DATE '1989-09-09', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Nuestra Señora de Guadalupe'
+WHERE u.email = 'vicario2@parroquia.com'
+ON CONFLICT DO NOTHING;
+
+-- Tesorero 2 (Parroquia Nuestra Señora de Guadalupe)
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
+SELECT u.id, 'Rosa', 'Castro Mejia', 'Av. Tesoreria 606', '987666777', DATE '1993-11-11', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Nuestra Señora de Guadalupe'
+WHERE u.email = 'tesorero2@parroquia.com'
+ON CONFLICT DO NOTHING;
+
+-- Usuarios estándar en Parroquia San Pedro
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
+SELECT u.id, 'Luis Alberto', 'Rojas Díaz', 'Calle San Pedro 101', '900111222', DATE '1994-01-10', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia San Pedro'
+WHERE u.email = 'user1@parroquia.com'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
-SELECT NULL, 'Carlos', 'Rodríguez', 'Av. 4', '934567890', DATE '1985-11-20', pr.parroquiaid, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia San Antonio de Chiclayo'
+SELECT u.id, 'María Elena', 'Sánchez Ruiz', 'Calle San Pedro 102', '900111223', DATE '1995-02-20', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia San Pedro'
+WHERE u.email = 'user2@parroquia.com'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
+SELECT u.id, 'José Carlos', 'Mendoza León', 'Calle San Pedro 103', '900111224', DATE '1992-03-15', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia San Pedro'
+WHERE u.email = 'user3@parroquia.com'
+ON CONFLICT DO NOTHING;
+
+-- Usuarios estándar en Parroquia Nuestra Señora de Guadalupe
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
+SELECT u.id, 'Rosa María', 'Cruz Torres', 'Av. San Antonio 201', '900222333', DATE '1990-04-05', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Nuestra Señora de Guadalupe'
+WHERE u.email = 'user4@parroquia.com'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
+SELECT u.id, 'Pedro Luis', 'Bravo Silva', 'Av. San Antonio 202', '900222334', DATE '1989-06-18', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Nuestra Señora de Guadalupe'
+WHERE u.email = 'user5@parroquia.com'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
+SELECT u.id, 'Carla', 'Gutiérrez Mora', 'Av. San Antonio 203', '900222335', DATE '1993-08-22', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Nuestra Señora de Guadalupe'
+WHERE u.email = 'user6@parroquia.com'
+ON CONFLICT DO NOTHING;
+
+-- Usuarios estándar en Parroquia Señor de la Justicia
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
+SELECT u.id, 'Javier', 'Paredes Núñez', 'Av. Sagrado Corazón 301', '900333444', DATE '1988-09-09', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Señor de la Justicia'
+WHERE u.email = 'user7@parroquia.com'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
+SELECT u.id, 'Lucía', 'Campos Vera', 'Av. Sagrado Corazón 302', '900333445', DATE '1991-11-11', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Señor de la Justicia'
+WHERE u.email = 'user8@parroquia.com'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
+SELECT u.id, 'Diego', 'Ríos Palacios', 'Av. Sagrado Corazón 303', '900333446', DATE '1996-12-01', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Señor de la Justicia'
+WHERE u.email = 'user9@parroquia.com'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO public.persona (userid, per_nombres, per_apellidos, per_domicilio, per_telefono, fecha_nacimiento, parroquiaid, created_at, updated_at)
+SELECT u.id, 'Elena', 'Navarro Salas', 'Av. Sagrado Corazón 304', '900333447', DATE '1997-02-14', pr.parroquiaid, NOW(), NOW()
+FROM public.users u
+JOIN public.parroquia pr ON pr.par_nombre = 'Parroquia Señor de la Justicia'
+WHERE u.email = 'user10@parroquia.com'
 ON CONFLICT DO NOTHING;
 
 -- =========================================================
--- ACTOS LITÚRGICOS (Tipos de actos - sin fecha/hora)
+-- ACTOS LITÚRGICOS, HORARIOS, RESERVAS Y PAGOS
 -- =========================================================
 
--- Parroquia Catedral de Lambayeque
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado, created_at, updated_at)
-SELECT pr.parroquiaid, 'misa', 'Misa Dominical', 'Misa principal de la parroquia cada domingo', TRUE, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
-ON CONFLICT DO NOTHING;
 
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado, created_at, updated_at)
-SELECT pr.parroquiaid, 'misa', 'Misa Diaria', 'Misa diaria de lunes a sábado', TRUE, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
-ON CONFLICT DO NOTHING;
 
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado, created_at, updated_at)
-SELECT pr.parroquiaid, 'bautismo', 'Bautismos Comunitarios', 'Bautismos del primer domingo del mes', TRUE, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
-ON CONFLICT DO NOTHING;
+-- ---------------------------------------------------------
+-- 1) ACTOS LITÚRGICOS 
+-- ---------------------------------------------------------
 
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado, created_at, updated_at)
-SELECT pr.parroquiaid, 'matrimonio', 'Ceremonias Matrimoniales', 'Celebraciones matrimoniales con reserva previa', TRUE, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
-ON CONFLICT DO NOTHING;
 
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado, created_at, updated_at)
-SELECT pr.parroquiaid, 'confirmacion', 'Confirmaciones', 'Ceremonia anual de confirmación', TRUE, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
-ON CONFLICT DO NOTHING;
 
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado, created_at, updated_at)
-SELECT pr.parroquiaid, 'comunion', 'Primera Comunión', 'Ceremonia anual de primera comunión', TRUE, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Catedral de Lambayeque'
-ON CONFLICT DO NOTHING;
+--------------------------------------------------------------------------------------------
+-- 2) HORARIOS 
+--------------------------------------------------------------------------------------------
 
--- Parroquia San Antonio de Chiclayo
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado, created_at, updated_at)
-SELECT pr.parroquiaid, 'misa', 'Misa Dominical', 'Misa principal cada domingo', TRUE, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia San Antonio de Chiclayo'
-ON CONFLICT DO NOTHING;
 
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado, created_at, updated_at)
-SELECT pr.parroquiaid, 'bautismo', 'Bautismos Comunitarios', 'Bautismos mensuales', TRUE, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia San Antonio de Chiclayo'
-ON CONFLICT DO NOTHING;
 
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado, created_at, updated_at)
-SELECT pr.parroquiaid, 'exequias', 'Servicios Funerarios', 'Servicios de exequias y entierros', TRUE, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia San Antonio de Chiclayo'
-ON CONFLICT DO NOTHING;
+-- ---------------------------------------------------------
+-- 3) PAGOS 
+-- ---------------------------------------------------------
 
--- Parroquia Sagrado Corazón - JLO
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado, created_at, updated_at)
-SELECT pr.parroquiaid, 'misa', 'Misa Dominical', 'Misa comunitaria cada domingo', TRUE, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Sagrado Corazón - JLO'
-ON CONFLICT DO NOTHING;
 
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado, created_at, updated_at)
-SELECT pr.parroquiaid, 'misa', 'Misa Vespertina', 'Misa especial para jóvenes', TRUE, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Sagrado Corazón - JLO'
-ON CONFLICT DO NOTHING;
 
-INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado, created_at, updated_at)
-SELECT pr.parroquiaid, 'matrimonio', 'Ceremonias Matrimoniales', 'Celebraciones matrimoniales especiales', TRUE, NOW(), NOW()
-FROM public.parroquia pr WHERE pr.par_nombre = 'Parroquia Sagrado Corazón - JLO'
-ON CONFLICT DO NOTHING;
+-- ---------------------------------------------------------
+-- 4) RESERVAS 
+-- ---------------------------------------------------------
 
--- =========================================================
--- HORARIOS (Instancias específicas con fecha y hora)
--- Relación: 1 Acto Litúrgico puede tener MÚLTIPLES horarios
--- =========================================================
 
--- Horarios para "Misa Dominical" - Parroquia Catedral de Lambayeque
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '1 day', TIME '09:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Misa Dominical'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '7 day', TIME '09:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Misa Dominical'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '8 day', TIME '09:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Misa Dominical'
-ON CONFLICT DO NOTHING;
-
--- Horarios para "Misa Diaria" - Parroquia Catedral de Lambayeque
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '2 day', TIME '07:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Misa Diaria'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '3 day', TIME '07:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Misa Diaria'
-ON CONFLICT DO NOTHING;
-
--- Horarios para "Bautismos Comunitarios" - Parroquia Catedral de Lambayeque
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '1 day', TIME '11:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Bautismos Comunitarios'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '15 day', TIME '11:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Bautismos Comunitarios'
-ON CONFLICT DO NOTHING;
-
--- Horarios para "Ceremonias Matrimoniales" - Parroquia Catedral de Lambayeque
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '3 day', TIME '16:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Ceremonias Matrimoniales'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '10 day', TIME '17:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Ceremonias Matrimoniales'
-ON CONFLICT DO NOTHING;
-
--- Horarios para "Confirmaciones" - Parroquia Catedral de Lambayeque
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '11 day', TIME '10:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Confirmaciones'
-ON CONFLICT DO NOTHING;
-
--- Horarios para "Primera Comunión" - Parroquia Catedral de Lambayeque
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '14 day', TIME '10:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Catedral de Lambayeque' AND a.act_titulo = 'Primera Comunión'
-ON CONFLICT DO NOTHING;
-
--- Horarios para Parroquia San Antonio de Chiclayo
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '1 day', TIME '10:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia San Antonio de Chiclayo' AND a.act_titulo = 'Misa Dominical'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '2 day', TIME '11:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia San Antonio de Chiclayo' AND a.act_titulo = 'Bautismos Comunitarios'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '4 day', TIME '14:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia San Antonio de Chiclayo' AND a.act_titulo = 'Servicios Funerarios'
-ON CONFLICT DO NOTHING;
-
--- Horarios para Parroquia Sagrado Corazón - JLO
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '2 day', TIME '09:30', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Sagrado Corazón - JLO' AND a.act_titulo = 'Misa Dominical'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '4 day', TIME '18:30', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Sagrado Corazón - JLO' AND a.act_titulo = 'Misa Vespertina'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, created_at, updated_at)
-SELECT a.actoliturgicoid, CURRENT_DATE + INTERVAL '6 day', TIME '17:00', NOW(), NOW()
-FROM public.actoliturgico a
-JOIN public.parroquia p ON p.parroquiaid = a.parroquiaid
-WHERE p.par_nombre = 'Parroquia Sagrado Corazón - JLO' AND a.act_titulo = 'Ceremonias Matrimoniales'
-ON CONFLICT DO NOTHING;
-
--- =========================================================
--- RESERVAS (para horarios específicos)
--- Nota: res_persona_nombre se usa cuando personaid es NULL (persona no registrada)
--- =========================================================
-
--- Reservas con personas REGISTRADAS (tienen personaid)
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
-SELECT h.horarioid, per.personaid, NULL, 'Reserva para bautismo familiar', NOW(), NOW()
-FROM public.horario h
-JOIN public.persona per ON per.per_nombres = 'Ana' AND per.per_apellidos = 'García'
-JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
-WHERE a.act_nombre = 'bautismo' AND h.h_fecha = CURRENT_DATE + INTERVAL '1 day'
-LIMIT 1
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
-SELECT h.horarioid, per.personaid, NULL, 'Ceremonia matrimonial especial', NOW(), NOW()
-FROM public.horario h
-JOIN public.persona per ON per.per_nombres = 'Carlos' AND per.per_apellidos = 'Rodríguez'
-JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
-WHERE a.act_nombre = 'matrimonio' AND h.h_fecha = CURRENT_DATE + INTERVAL '3 day'
-LIMIT 1
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
-SELECT h.horarioid, per.personaid, NULL, 'Misa familiar dominical', NOW(), NOW()
-FROM public.horario h
-JOIN public.persona per ON per.per_nombres = 'María' AND per.per_apellidos = 'Pérez'
-JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
-WHERE a.act_nombre = 'misa' AND h.h_fecha = CURRENT_DATE + INTERVAL '1 day' AND h.h_hora = TIME '09:00'
-LIMIT 1
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
-SELECT h.horarioid, per.personaid, NULL, 'Reserva para servicio funerario', NOW(), NOW()
-FROM public.horario h
-JOIN public.persona per ON per.per_nombres = 'Juan' AND per.per_apellidos = 'López'
-JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
-WHERE a.act_nombre = 'exequias' AND h.h_fecha = CURRENT_DATE + INTERVAL '4 day'
-LIMIT 1
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
-SELECT h.horarioid, per.personaid, NULL, 'Misa vespertina para jóvenes', NOW(), NOW()
-FROM public.horario h
-JOIN public.persona per ON per.per_nombres = 'Jose Juan' AND per.per_apellidos = 'Pérez López'
-JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
-WHERE a.act_titulo = 'Misa Vespertina' AND h.h_fecha = CURRENT_DATE + INTERVAL '4 day'
-LIMIT 1
-ON CONFLICT DO NOTHING;
-
--- Reservas con personas NO REGISTRADAS (sin personaid, solo nombre)
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
-SELECT h.horarioid, NULL, 'Pedro Martínez', 'Reserva para confirmación', NOW(), NOW()
-FROM public.horario h
-JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
-WHERE a.act_nombre = 'confirmacion' AND h.h_fecha = CURRENT_DATE + INTERVAL '11 day'
-LIMIT 1
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.reserva (horarioid, personaid, res_persona_nombre, res_descripcion, created_at, updated_at)
-SELECT h.horarioid, NULL, 'Lucía Fernández', 'Primera comunión de mi hija', NOW(), NOW()
-FROM public.horario h
-JOIN public.actoliturgico a ON a.actoliturgicoid = h.actoliturgicoid
-WHERE a.act_nombre = 'comunion' AND h.h_fecha = CURRENT_DATE + INTERVAL '14 day'
-LIMIT 1
-ON CONFLICT DO NOTHING;
-
--- =========================================================
--- PAGOS (vinculados a reservas mediante pagoid)
--- =========================================================
-
-INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
-SELECT 'Yape o Plin', 50.00, 'pagado', 'Reserva para bautismo familiar', NOW(), NOW() + INTERVAL '2 day', NULL, NULL, 'QR-BAUTISMO'
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Reserva para bautismo familiar'
-);
-
-INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
-SELECT 'Tarjeta', 250.00, 'pendiente', 'Ceremonia matrimonial especial', NULL, NOW() + INTERVAL '3 day', '4242', 'VISA', NULL
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Ceremonia matrimonial especial'
-);
-
-INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
-SELECT 'Efectivo', 120.00, 'pagado', 'Reserva para servicio funerario', NOW(), NOW() + INTERVAL '1 day', NULL, NULL, NULL
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Reserva para servicio funerario'
-);
-
-INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
-SELECT 'Efectivo', 25.00, 'pendiente', 'Misa familiar dominical', NULL, NOW() + INTERVAL '1 day', NULL, NULL, NULL
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Misa familiar dominical'
-);
-
-INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
-SELECT 'Yape o Plin', 30.00, 'pagado', 'Misa vespertina para jóvenes', NOW(), NOW() + INTERVAL '2 day', NULL, NULL, 'QR-MISA-JOVENES'
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Misa vespertina para jóvenes'
-);
-
-INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
-SELECT 'Tarjeta', 75.00, 'pendiente', 'Reserva para confirmación', NULL, NOW() + INTERVAL '5 day', '1234', 'MASTERCARD', NULL
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Reserva para confirmación'
-);
-
-INSERT INTO public.pago (pago_medio, pago_monto, pago_estado, pago_descripcion, pago_confirmado, pago_expira, pago_tarjeta_ultimos, pago_tarjeta_tipo, pago_qr_data)
-SELECT 'Efectivo', 100.00, 'pagado', 'Primera comunión de mi hija', NOW(), NOW() + INTERVAL '7 day', NULL, NULL, NULL
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.pago WHERE pago_descripcion = 'Primera comunión de mi hija'
-);
-
-UPDATE public.reserva r
-SET pagoid = pg.pagoid
-FROM public.pago pg
-WHERE r.res_descripcion = pg.pago_descripcion
-  AND r.pagoid IS DISTINCT FROM pg.pagoid;
 
 COMMIT;

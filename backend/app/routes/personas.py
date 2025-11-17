@@ -1,9 +1,28 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, verify_jwt_in_request
 from app import db
 from app.models import Persona
+from app.utils.permissions import has_permission
 
 personas_bp = Blueprint('personas', __name__)
+
+@personas_bp.before_request
+def _enforce_personas_permissions():
+    # Permitir preflight CORS sin autenticación
+    if request.method == 'OPTIONS':
+        return None
+
+    # Personas es compartido (Personal, Litúrgico, posiblemente Seguridad)
+    verify_jwt_in_request()
+    if not (
+        has_permission('personal')
+        or has_permission('liturgico')
+        or has_permission('seguridad')
+    ):
+        return jsonify({
+            'error': 'Forbidden',
+            'message': 'Permiso requerido: personal, liturgico o seguridad'
+        }), 403
 
 @personas_bp.get('')
 @jwt_required()

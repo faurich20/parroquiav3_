@@ -3,11 +3,13 @@ from flask_jwt_extended import jwt_required
 from app import db
 from app.models import Role, User
 from app.constants import PERMISOS
+from app.utils.permissions import permission_required
 
 roles_bp = Blueprint('roles', __name__)
 
 @roles_bp.route('', methods=['GET'])
 @jwt_required()
+@permission_required('seguridad', 'seguridad_roles', 'seguridad_roles_ver')
 def list_roles():
     try:
         page = request.args.get('page', 1, type=int)
@@ -34,6 +36,7 @@ def list_roles():
 
 @roles_bp.route('/sync', methods=['POST'])
 @jwt_required()
+@permission_required('seguridad', 'seguridad_roles', 'seguridad_roles_crear')
 def sync_roles_from_users():
     try:
         # Obtener roles distintos de usuarios
@@ -55,6 +58,7 @@ def sync_roles_from_users():
 
 @roles_bp.route('', methods=['POST'])
 @jwt_required()
+@permission_required('seguridad', 'seguridad_roles', 'seguridad_roles_crear')
 def create_role():
     try:
         data = request.get_json() or {}
@@ -89,6 +93,7 @@ def create_role():
 
 @roles_bp.route('/<int:role_id>', methods=['PUT'])
 @jwt_required()
+@permission_required('seguridad', 'seguridad_roles', 'seguridad_roles_editar')
 def update_role(role_id):
     try:
         role = Role.query.get(role_id)
@@ -131,6 +136,7 @@ def update_role(role_id):
 
 @roles_bp.route('/<int:role_id>', methods=['DELETE'])
 @jwt_required()
+@permission_required('seguridad', 'seguridad_roles', 'seguridad_roles_eliminar')
 def delete_role(role_id):
     try:
         role = Role.query.get(role_id)
@@ -147,6 +153,7 @@ def delete_role(role_id):
 
 @roles_bp.route('/<int:role_id>/status', methods=['PUT'])
 @jwt_required()
+@permission_required('seguridad', 'seguridad_roles', 'seguridad_roles_cambiar_estado')
 def update_role_status(role_id):
     try:
         role = Role.query.get(role_id)

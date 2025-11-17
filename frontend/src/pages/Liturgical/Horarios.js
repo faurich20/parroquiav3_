@@ -291,33 +291,43 @@ const Horarios = () => {
 	if (sourceIsHorarios) {
 		// Si la API devolvió horarios para la parroquia, úsalos
 		if (horarios && horarios.length > 0) {
-			return horarios.map(h => {
-				try {
-					const eventDate = h.h_fecha;
-					const eventTime = h.h_hora;
-					if (!eventDate || !eventTime) return null;
-					const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
-					if (isNaN(startDateTime.getTime())) return null;
-					const endDateTime = new Date(startDateTime.getTime() + (60 * 60 * 1000));
-					return {
-						id: h.horarioid,
-						title: h.acto_titulo || h.acto_nombre || h.act_nombre || 'Sin título',
-						start: startDateTime,
-						end: endDateTime,
-						location: h.parroquia_nombre || h.par_nombre || 'Sin ubicación',
-						// Usar el nombre real del acto (act_nombre / acto_nombre) para que coincida con LITURGICAL_TYPES
-						type: h.acto_nombre || h.act_nombre || h.acto_tipo || h.type || 'misa',
-						allDay: false,
-						reservas_count: h.reservas_count || 0,
-						reservas_activas_count: h.reservas_activas_count || 0,
-						raw: h
-					};
-				} catch (err) {
-					console.error('Error procesando horario (horarios):', h, err);
-					return null;
-				}
-			}).filter(Boolean);
-		}
+      return horarios
+        .map(h => {
+          try {
+            const eventDate = h.h_fecha;
+            const eventTime = h.h_hora;
+            if (!eventDate || !eventTime) return null;
+
+            const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
+            if (isNaN(startDateTime.getTime())) return null;
+
+            // Usar fecha/hora fin si vienen; si no, 1 hora después
+            const endDateStr = h.h_fecha_fin || eventDate;
+            const endTimeStr = h.h_hora_fin || eventTime;
+            let endDateTime = new Date(`${endDateStr}T${endTimeStr}:00`);
+            if (isNaN(endDateTime.getTime()) || endDateTime < startDateTime) {
+              endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+            }
+
+            return {
+              id: h.horarioid,
+              title: h.acto_titulo || h.acto_nombre || h.act_nombre || 'Sin título',
+              start: startDateTime,
+              end: endDateTime,
+              location: h.parroquia_nombre || h.par_nombre || 'Sin ubicación',
+              type: h.acto_nombre || h.act_nombre || h.acto_tipo || h.type || 'misa',
+              allDay: false,
+              reservas_count: h.reservas_count || 0,
+              reservas_activas_count: h.reservas_activas_count || 0,
+              raw: h,
+            };
+          } catch (err) {
+            console.error('Error procesando horario (horarios):', h, err);
+            return null;
+          }
+        })
+        .filter(Boolean);
+    }
 
 		// FALLBACK: si horarios está vacío por algún motivo, filtrar items del hook por parroquiaid
 		if (items && items.length > 0) {
@@ -361,32 +371,42 @@ const Horarios = () => {
 
 	// Comportamiento original: usar items del hook
 	if (!items || items.length === 0) return [];
-	return items.map(event => {
-		try {
-			const eventDate = event.date;
-			const eventTime = event.time;
-			if (!eventDate || !eventTime) return null;
-			const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
-			if (isNaN(startDateTime.getTime())) return null;
-			const endDateTime = new Date(startDateTime.getTime() + (60 * 60 * 1000));
-			return {
-				id: event.horarioid,
-				title: event.title || 'Sin título',
-				start: startDateTime,
-				end: endDateTime,
-				location: event.location || 'Sin ubicación',
-				type: event.type || 'misa',
-				allDay: false,
-				reservas_count: event.reservas_count || 0,
-				reservas_activas_count: event.reservas_activas_count || 0,
-				actoliturgicoid: event.actoliturgicoid,
-				raw: event // mantener referencia al objeto original
-			};
-		} catch (error) {
-			console.error('Error procesando horario:', event, error);
-			return null;
-		}
-	}).filter(Boolean);
+  return items
+    .map(event => {
+      try {
+        const eventDate = event.date;
+        const eventTime = event.time;
+        if (!eventDate || !eventTime) return null;
+
+        const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
+        if (isNaN(startDateTime.getTime())) return null;
+
+        // Usar fin si viene de /calendario; si no, +1 hora
+        const endDateStr = event.date_end || eventDate;
+        const endTimeStr = event.time_end || eventTime;
+        let endDateTime = new Date(`${endDateStr}T${endTimeStr}:00`);
+        if (isNaN(endDateTime.getTime()) || endDateTime < startDateTime) {
+          endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+        }
+        return {
+          id: event.horarioid,
+          title: event.title || 'Sin t��tulo',
+          start: startDateTime,
+          end: endDateTime,
+          location: event.location || 'Sin ubicaci��n',
+          type: event.type || 'misa',
+          allDay: false,
+          reservas_count: event.reservas_count || 0,
+          reservas_activas_count: event.reservas_activas_count || 0,
+          actoliturgicoid: event.actoliturgicoid,
+          raw: event,
+        };
+      } catch (error) {
+        console.error('Error procesando horario:', event, error);
+        return null;
+      }
+    })
+    .filter(Boolean);
 }, [items, horarios, selectedParroquia]);
 
   // Estilos personalizados para los eventos según su tipo

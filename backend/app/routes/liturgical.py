@@ -1,9 +1,10 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, verify_jwt_in_request
 from datetime import datetime, timedelta
 from sqlalchemy import text
 from app import db
 from app.models import ActoLiturgico, Horario, Reserva
+from app.utils.permissions import permission_required, has_permission
 
 liturgical_bp = Blueprint('liturgical', __name__)
 
@@ -21,12 +22,35 @@ def parse_time(time_str):
     except Exception:
         return None
 
+# Enforce permisos para todo el blueprint litúrgico
+@liturgical_bp.before_request
+def _enforce_liturgico_permission():
+    # Permitir preflight CORS sin autenticación
+    if request.method == 'OPTIONS':
+        return None
+
+    # Requiere JWT y al menos un permiso litúrgico
+    verify_jwt_in_request()
+    allowed = (
+        has_permission('liturgico')
+        or has_permission('liturgico_actos')
+        or has_permission('liturgico_horarios')
+        or has_permission('liturgico_reservas')
+        or has_permission('liturgico_reportes')
+    )
+    if not allowed:
+        return jsonify({
+            'error': 'Forbidden',
+            'message': 'Permiso requerido: liturgico_*'
+        }), 403
+
 # =========================================================
 # ACTOS LITÚRGICOS CON HORARIO (OPERACIÓN COMBINADA)
 # =========================================================
 
 @liturgical_bp.route('/actos-con-horario', methods=['POST'])
 @jwt_required()
+@permission_required('liturgico_actos', 'liturgico_actos_crear')
 def create_acto_con_horario():
     """Crea un nuevo acto litúrgico junto con su horario"""
     try:
@@ -55,7 +79,29 @@ def create_acto_con_horario():
         h_hora = parse_time(data.get('h_hora'))
 
         if not h_fecha or not h_hora:
-            return jsonify({'error': 'Fecha y hora inválidas'}), 400
+            return jsonify({'error': 'Fecha y hora invǭlidas'}), 400
+
+        # Fecha y hora final: si no se envían, usar las de inicio
+        h_fecha_fin = parse_date(data.get('h_fecha_fin') or data.get('h_fecha'))
+        h_hora_fin = parse_time(data.get('h_hora_fin') or data.get('h_hora'))
+
+        if not h_fecha_fin or not h_hora_fin:
+            return jsonify({'error': 'Fecha y hora invalidas 1'}), 400
+        print('[create_acto_con_horario] data recibido:', data)
+        print('[create_acto_con_horario] fechas calculadas:', {
+            'h_fecha': h_fecha,
+            'h_hora': h_hora,
+            'h_fecha_fin': h_fecha_fin,
+            'h_hora_fin': h_hora_fin,
+        })
+
+        # Validar que la fecha/hora final no sea anterior a la inicial
+        inicio_dt = datetime.combine(h_fecha, h_hora)
+        fin_dt = datetime.combine(h_fecha_fin, h_hora_fin)
+        if fin_dt < inicio_dt:
+            return jsonify({
+                'error': 'La fecha/hora final debe ser mayor o igual a la inicial'
+            }), 400
 
         # Iniciar transacción
         acto_id = None
@@ -77,16 +123,32 @@ def create_acto_con_horario():
 
             acto_id = acto_result.fetchone().actoliturgicoid
 
-            # 2. Crear el horario asociado
+            # 2. Crear el horario asociado (rango inicio/fin)
             horario_result = db.session.execute(text("""
-                INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora)
-                VALUES (:actoliturgicoid, :h_fecha, :h_hora)
+                INSERT INTO public.horario (
+                    actoliturgicoid,
+                    h_fecha,
+                    h_hora,
+                    h_fecha_fin,
+                    h_hora_fin
+                )
+                VALUES (
+                    :actoliturgicoid,
+                    :h_fecha,
+                    :h_hora,
+                    :h_fecha_fin,
+                    :h_hora_fin
+                )
                 RETURNING horarioid
             """), {
                 'actoliturgicoid': acto_id,
                 'h_fecha': h_fecha,
-                'h_hora': h_hora
+                'h_hora': h_hora,
+                'h_fecha_fin': h_fecha_fin,
+                'h_hora_fin': h_hora_fin, 
+                
             })
+
 
             horario_id = horario_result.fetchone().horarioid
 
@@ -107,6 +169,8 @@ def create_acto_con_horario():
                     h.horarioid,
                     h.h_fecha,
                     h.h_hora,
+                    h.h_fecha_fin,
+                    h.h_hora_fin,
                     h.created_at as horario_created_at,
                     h.updated_at as horario_updated_at
                 FROM public.actoliturgico a
@@ -114,6 +178,14 @@ def create_acto_con_horario():
                 LEFT JOIN public.horario h ON a.actoliturgicoid = h.actoliturgicoid
                 WHERE a.actoliturgicoid = :acto_id
             """), {'acto_id': acto_id}).fetchone()
+            print('[create_acto_con_horario] resultado SELECT:', {
+                'actoliturgicoid': resultado.actoliturgicoid,
+                'parroquiaid': resultado.parroquiaid,
+                'h_fecha': resultado.h_fecha,
+                'h_hora': resultado.h_hora,
+                'h_fecha_fin': getattr(resultado, 'h_fecha_fin', None),
+                'h_hora_fin': getattr(resultado, 'h_hora_fin', None),
+            })
 
             return jsonify({
                 'success': True,
@@ -134,6 +206,8 @@ def create_acto_con_horario():
                     'actoliturgicoid': resultado.actoliturgicoid,
                     'h_fecha': resultado.h_fecha.isoformat() if resultado.h_fecha else None,
                     'h_hora': resultado.h_hora.strftime('%H:%M') if resultado.h_hora else None,
+                    'h_fecha_fin': resultado.h_fecha_fin.isoformat() if resultado.h_fecha_fin else None,
+                    'h_hora_fin': resultado.h_hora_fin.strftime('%H:%M') if resultado.h_hora_fin else None,
                     'parroquiaid': resultado.parroquiaid,
                     'created_at': resultado.horario_created_at.isoformat() if resultado.horario_created_at else None,
                     'updated_at': resultado.horario_updated_at.isoformat() if resultado.horario_updated_at else None
@@ -167,13 +241,26 @@ def list_actos():
                 a.updated_at,
                 h.horarioid,
                 h.h_fecha,
-                h.h_hora
+                h.h_hora,
+                h.h_fecha_fin,
+                h.h_hora_fin,
+                h.created_at as horario_created_at
             FROM public.actoliturgico a
             LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
             LEFT JOIN public.horario h ON a.actoliturgicoid = h.actoliturgicoid
             WHERE a.act_estado = TRUE
             ORDER BY a.actoliturgicoid DESC
         """)).fetchall()
+        print('[list_actos] total items:', len(items))
+        for row in items:
+            print('[list_actos] item:', {
+                'id': row.actoliturgicoid,
+                'parroquiaid': row.parroquiaid,
+                'h_fecha': row.h_fecha,
+                'h_hora': row.h_hora,
+                'h_fecha_fin': getattr(row, 'h_fecha_fin', None),
+                'h_hora_fin': getattr(row, 'h_hora_fin', None),
+            })
 
         result = []
         for row in items:
@@ -188,6 +275,8 @@ def list_actos():
                 'horarioid': row.horarioid,
                 'h_fecha': row.h_fecha.isoformat() if row.h_fecha else None,
                 'h_hora': row.h_hora.strftime('%H:%M') if row.h_hora else None,
+                'h_fecha_fin': row.h_fecha_fin.isoformat() if row.h_fecha_fin else None,
+                'h_hora_fin': row.h_hora_fin.strftime('%H:%M') if row.h_hora_fin else None,                
                 'created_at': row.created_at.isoformat() if row.created_at else None,
                 'updated_at': row.updated_at.isoformat() if row.updated_at else None
             })
@@ -199,6 +288,7 @@ def list_actos():
 
 @liturgical_bp.route('/actos', methods=['POST'])
 @jwt_required()
+@permission_required('liturgico_actos', 'liturgico_actos_crear')
 def create_acto():
     """Crea un nuevo acto litúrgico (opcionalmente con horario)"""
     try:
@@ -266,7 +356,10 @@ def create_acto():
                     a.updated_at,
                     h.horarioid,
                     h.h_fecha,
-                    h.h_hora
+                    h.h_hora,
+                    h.h_fecha_fin,
+                    h.h_hora_fin,
+                    h.created_at as horario_created_at
                 FROM public.actoliturgico a
                 LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
                 LEFT JOIN public.horario h ON a.actoliturgicoid = h.actoliturgicoid
@@ -301,6 +394,7 @@ def create_acto():
 
 @liturgical_bp.route('/actos/<int:acto_id>', methods=['PUT'])
 @jwt_required()
+@permission_required('liturgico_actos', 'liturgico_actos_editar')
 def update_acto(acto_id):
     """Actualiza un acto litúrgico y su horario asociado"""
     try:
@@ -395,7 +489,10 @@ def update_acto(acto_id):
                     a.updated_at,
                     h.horarioid,
                     h.h_fecha,
-                    h.h_hora
+                    h.h_hora,
+                    h.h_fecha_fin,
+                    h.h_hora_fin,
+                    h.created_at as horario_created_at                   
                 FROM public.actoliturgico a
                 LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
                 LEFT JOIN public.horario h ON a.actoliturgicoid = h.actoliturgicoid
@@ -430,6 +527,7 @@ def update_acto(acto_id):
 
 @liturgical_bp.route('/actos/<int:acto_id>', methods=['DELETE'])
 @jwt_required()
+@permission_required('liturgico_actos', 'liturgico_actos_eliminar')
 def delete_acto(acto_id):
     """Elimina un acto litúrgico (y sus horarios asociados en cascada)"""
     try:
@@ -489,6 +587,9 @@ def list_horarios():
                 a.act_titulo,
                 h.h_fecha,
                 h.h_hora,
+                h.h_fecha_fin,
+                h.h_hora_fin,
+                h.created_at as horario_created_at,                        
                 a.parroquiaid,
                 p.par_nombre as parroquia_nombre,
                 COALESCE(COUNT(r.reservaid), 0) as reservas_total
@@ -510,6 +611,8 @@ def list_horarios():
                 'acto_titulo': row.act_titulo,
                 'h_fecha': row.h_fecha.isoformat() if row.h_fecha else None,
                 'h_hora': row.h_hora.strftime('%H:%M') if row.h_hora else None,
+                'h_fecha_fin': row.h_fecha_fin.isoformat() if row.h_fecha_fin else None,
+                'h_hora_fin': row.h_hora_fin.strftime('%H:%M') if row.h_hora_fin else None,             
                 'parroquiaid': row.parroquiaid,
                 'parroquia_nombre': row.parroquia_nombre,
                 'reservas_total': row.reservas_total,
@@ -542,8 +645,32 @@ def create_horario():
         h_hora = parse_time(data.get('h_hora'))
 
         if not h_fecha or not h_hora:
-            return jsonify({'error': 'Fecha y hora inválidas'}), 400
+            return jsonify({'error': 'Fecha y hora invǭlidas'}), 400
 
+        # Fecha y hora final: si no se envían, usar las de inicio
+        h_fecha_fin = parse_date(data.get('h_fecha_fin') or data.get('h_fecha'))
+        h_hora_fin = parse_time(data.get('h_hora_fin') or data.get('h_hora'))
+
+        if not h_fecha_fin or not h_hora_fin:
+            return jsonify({'error': 'Fecha y hora invalidotas..'}), 400
+        print('[create_acto_con_horario] data recibido:', data)
+        print('[create_acto_con_horario] fechas calculadas:', {
+            'h_fecha': h_fecha,
+            'h_hora': h_hora,
+            'h_fecha_fin': h_fecha_fin,
+            'h_hora_fin': h_hora_fin,
+        })
+
+        # Validar que la fecha/hora final no sea anterior a la inicial
+        inicio_dt = datetime.combine(h_fecha, h_hora)
+        fin_dt = datetime.combine(h_fecha_fin, h_hora_fin)
+        if fin_dt < inicio_dt:
+            return jsonify({
+                'error': 'La fecha/hora final debe ser mayor o igual a la inicial'
+            }), 400
+        
+
+        #inciar transacción
         result = db.session.execute(text("""
             INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora)
             VALUES (:actoliturgicoid, :h_fecha, :h_hora)
@@ -566,6 +693,9 @@ def create_horario():
                 a.act_titulo,
                 h.h_fecha,
                 h.h_hora,
+                h.h_fecha_fin,
+                h.h_hora_fin,
+                h.created_at as horario_created_at,
                 a.parroquiaid,
                 p.par_nombre as parroquia_nombre,
                 h.created_at,
@@ -606,6 +736,7 @@ def create_horario():
 
 @liturgical_bp.route('/reservas', methods=['GET'])
 @jwt_required()
+@permission_required('liturgico_reservas_ver', 'liturgico_reservas', 'liturgico')
 def list_reservas():
     """Lista todas las reservas de actos litúrgicos"""
     try:
@@ -621,6 +752,9 @@ def list_reservas():
                 r.updated_at,
                 h.h_fecha,
                 h.h_hora,
+                h.h_fecha_fin,
+                h.h_hora_fin,
+                h.created_at as horario_created_at,                                              
                 a.act_nombre,
                 a.act_titulo,
                 p.par_nombre as parroquia_nombre,
@@ -655,6 +789,8 @@ def list_reservas():
                 'estado_texto': row.estado_texto.capitalize() if row.estado_texto else 'Pendiente',
                 'h_fecha': row.h_fecha.isoformat() if row.h_fecha else None,
                 'h_hora': row.h_hora.strftime('%H:%M') if row.h_hora else None,
+                'h_fecha_fin': row.h_fecha_fin.isoformat() if row.h_fecha_fin else None,
+                'h_hora_fin': row.h_hora_fin.strftime('%H:%M') if row.h_hora_fin else None,
                 'acto_nombre': row.act_nombre,
                 'acto_titulo': row.act_titulo,
                 'parroquia_nombre': row.parroquia_nombre,
@@ -669,6 +805,7 @@ def list_reservas():
 
 @liturgical_bp.route('/reservas', methods=['POST'])
 @jwt_required()
+@permission_required('liturgico_reservas_crear', 'liturgico_reservas', 'liturgico')
 def create_reserva():
     """Crea una nueva reserva para un horario"""
     try:
@@ -761,8 +898,6 @@ def create_reserva():
                 r.res_descripcion,
                 r.created_at,
                 r.updated_at,
-                h.h_fecha,
-                h.h_hora,
                 a.act_nombre,
                 a.act_titulo,
                 p.par_nombre as parroquia_nombre,
@@ -826,6 +961,7 @@ def create_reserva():
 
 @liturgical_bp.route('/reservas/<int:reservaid>', methods=['PUT'])
 @jwt_required()
+@permission_required('liturgico_reservas_editar', 'liturgico_reservas', 'liturgico')
 def update_reserva(reservaid):
     """Actualiza una reserva"""
     try:
@@ -885,6 +1021,9 @@ def update_reserva(reservaid):
                 r.updated_at,
                 h.h_fecha,
                 h.h_hora,
+                h.h_fecha_fin,
+                h.h_hora_fin,
+                h.created_at as horario_created_at,
                 a.act_nombre,
                 a.act_titulo,
                 p.par_nombre as parroquia_nombre,
@@ -934,6 +1073,7 @@ def update_reserva(reservaid):
 
 @liturgical_bp.route('/reservas/<int:reservaid>', methods=['DELETE'])
 @jwt_required()
+@permission_required('liturgico_reservas_eliminar', 'liturgico_reservas', 'liturgico')
 def delete_reserva(reservaid):
     """Elimina una reserva"""
     try:
@@ -969,6 +1109,9 @@ def get_calendario():
             SELECT
                 h.h_fecha,
                 h.h_hora,
+                h.h_fecha_fin,
+                h.h_hora_fin,
+                h.created_at as horario_created_at,
                 a.act_nombre,
                 a.act_titulo,
                 p.par_nombre as parroquia_nombre,
@@ -993,13 +1136,15 @@ def get_calendario():
             result.append({
                 'date': row.h_fecha.isoformat() if row.h_fecha else None,
                 'time': row.h_hora.strftime('%H:%M') if row.h_hora else None,
+                'date_end': row.h_fecha_fin.isoformat() if row.h_fecha_fin else None,
+                'time_end': row.h_hora_fin.strftime('%H:%M') if row.h_hora_fin else None,
                 'type': row.act_nombre,
                 'title': row.act_titulo,
                 'location': row.parroquia_nombre,
                 'reservas_count': row.reservas_count,
                 'reservas_activas_count': row.reservas_activas_count,
                 'horarioid': row.horarioid,
-                'actoliturgicoid': row.actoliturgicoid
+                'actoliturgicoid': row.actoliturgicoid,
             })
 
         return jsonify({'items': result}), 200
@@ -1021,6 +1166,9 @@ def get_horarios_by_date(date_str):
                 h.horarioid,
                 h.h_fecha,
                 h.h_hora,
+                h.h_fecha_fin,
+                h.h_hora_fin,
+                h.created_at as horario_created_at,                        
                 a.act_nombre,
                 a.act_titulo,
                 p.par_nombre as parroquia_nombre,
@@ -1041,7 +1189,9 @@ def get_horarios_by_date(date_str):
             result.append({
                 'horarioid': row.horarioid,
                 'h_fecha': row.h_fecha.isoformat() if row.h_fecha else None,
-                'h_hora': row.h_hora.strftime('%H:%M') if row.h_hora else None,
+                'h_hora': row.h_hora.strftime('%H:%M') if row.h_hora else None,               
+                'h_fecha_fin': row.h_fecha_fin.isoformat() if row.h_fecha_fin else None,
+                'h_hora_fin': row.h_hora_fin.strftime('%H:%M') if row.h_hora_fin else None,
                 'act_nombre': row.act_nombre,
                 'act_titulo': row.act_titulo,
                 'parroquia_nombre': row.parroquia_nombre,

@@ -1,10 +1,29 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
 from datetime import datetime
 from sqlalchemy import text
 from app import db
+from app.utils.permissions import has_permission
 
 pagos_bp = Blueprint('pagos', __name__)
+
+@pagos_bp.before_request
+def _enforce_accounting_or_sales_permission():
+    from flask import request as _request
+
+    # Permitir preflight CORS sin autenticación
+    if _request.method == 'OPTIONS':
+        return None
+
+    # Permitir endpoints públicos de prueba/diagnóstico sin auth
+    public_endpoints = {'pagos.debug_pagos', 'pagos.test_pagos'}
+    if _request.endpoint in public_endpoints:
+        return None
+
+    # Para el resto, exigir JWT y alguno de los permisos contabilidad o ventas
+    verify_jwt_in_request()
+    if not (has_permission('contabilidad') or has_permission('ventas')):
+        return jsonify({'error': 'Forbidden', 'message': 'Permiso requerido: contabilidad o ventas'}), 403
 
 @pagos_bp.route('/pagos', methods=['OPTIONS', 'POST'])
 @jwt_required()

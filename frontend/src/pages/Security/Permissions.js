@@ -10,15 +10,15 @@ import { ETIQUETAS_PERMISOS } from '../../constants/permissions';
 import useCatalogoPermisos from '../../hooks/useCatalogoPermisos';
 
 const PermissionsPage = () => {
-    const [users, setUsers] = useState([]);
-    const [selectedUser, setSelectedUser] = useState(null);
+    const [roles, setRoles] = useState([]);
+    const [selectedRole, setSelectedRole] = useState(null);
     const [permissions, setPermissions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [message, setMessage] = useState({ type: '', text: '' });
 
-    const { authFetch } = useAuth();
+    const { authFetch, user, reloadProfile } = useAuth();
     const { theme } = useTheme();
     const isDarkTheme = theme === 'black';
 
@@ -30,24 +30,25 @@ const PermissionsPage = () => {
         description: `Acceso a ${ETIQUETAS_PERMISOS[id] || id}`
     }));
 
-    // Cargar usuarios
+    // Cargar roles
     const didFetchRef = useRef(false);
 
     useEffect(() => {
-        const fetchUsers = async () => {
+        const fetchRoles = async () => {
             try {
                 setLoading(true);
-                const response = await authFetch('http://localhost:5000/api/users');
+                const response = await authFetch('http://localhost:5000/api/roles');
 
                 if (!response.ok) {
-                    throw new Error('Error al obtener usuarios');
+                    throw new Error('Error al obtener roles');
                 }
 
                 const data = await response.json();
-                setUsers(data.users || []);
+                const rows = Array.isArray(data) ? data : (data.roles || []);
+                setRoles(rows);
             } catch (err) {
-                console.error('Error obteniendo usuarios:', err);
-                setMessage({ type: 'error', text: 'Error al cargar usuarios' });
+                console.error('Error obteniendo roles:', err);
+                setMessage({ type: 'error', text: 'Error al cargar roles' });
             } finally {
                 setLoading(false);
             }
@@ -55,13 +56,13 @@ const PermissionsPage = () => {
 
         if (didFetchRef.current) return;
         didFetchRef.current = true;
-        fetchUsers();
+        fetchRoles();
     }, []);
 
-    // Seleccionar usuario y cargar sus permisos
-    const handleSelectUser = (user) => {
-        setSelectedUser(user);
-        setPermissions(user.permissions || []);
+    // Seleccionar rol y cargar sus permisos
+    const handleSelectRole = (role) => {
+        setSelectedRole(role);
+        setPermissions(role.permissions || []);
         setMessage({ type: '', text: '' });
     };
 
@@ -76,22 +77,20 @@ const PermissionsPage = () => {
 
     // Guardar permisos
     const handleSavePermissions = async () => {
-        if (!selectedUser) return;
+        if (!selectedRole) return;
 
         setSaving(true);
         setMessage({ type: '', text: '' });
 
         try {
-            const roleValue = typeof selectedUser.role === 'object' ? (selectedUser.role.name || selectedUser.role.id) : selectedUser.role;
-            const response = await authFetch(`http://localhost:5000/api/users/${selectedUser.id}`, {
+            const response = await authFetch(`http://localhost:5000/api/roles/${selectedRole.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    name: selectedUser.name,
-                    email: selectedUser.email,
-                    role: roleValue,
+                    name: selectedRole.name,
+                    description: selectedRole.description,
                     permissions: permissions,
-                    status: selectedUser.status
+                    status: selectedRole.status
                 })
             });
 
@@ -100,25 +99,30 @@ const PermissionsPage = () => {
             }
 
             const data = await response.json();
-            
-            // Actualizar usuario en la lista
-            setUsers(users.map(u => u.id === selectedUser.id ? data.user : u));
-            setSelectedUser(data.user);
-            
-            setMessage({ type: 'success', text: 'Permisos actualizados correctamente' });
+            const updated = data.role || data;
+            // Actualizar rol en la lista
+            setRoles(roles.map(r => r.id === selectedRole.id ? updated : r));
+            setSelectedRole(updated);
+
+            // Si el rol actualizado es el mismo que el del usuario actual, recargar perfil
+            if (user && user.role === updated.name) {
+                await reloadProfile();
+            }
+
+            setMessage({ type: 'success', text: 'Permisos del rol actualizados correctamente' });
             
             setTimeout(() => setMessage({ type: '', text: '' }), 3000);
         } catch (err) {
-            console.error('Error guardando permisos:', err);
-            setMessage({ type: 'error', text: 'Error al guardar permisos' });
+            console.error('Error guardando permisos del rol:', err);
+            setMessage({ type: 'error', text: 'Error al guardar permisos del rol' });
         } finally {
             setSaving(false);
         }
     };
 
-    const filteredUsers = users.filter(user =>
-        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    const filteredRoles = roles.filter(role =>
+        String(role.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        String(role.description || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     if (loading) {
@@ -133,20 +137,20 @@ const PermissionsPage = () => {
         <div className="space-y-6">
             <PageHeader
                 title="Gestión de Permisos"
-                subtitle="Configura los permisos de acceso para cada usuario"
+                subtitle="Configura los permisos de acceso para cada rol"
                 icon={Settings}
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Panel izquierdo - Lista de usuarios */}
+                {/* Panel izquierdo - Lista de roles */}
                 <Card>
                     <div className="p-4 border-b">
-                        <h3 className={`text-lg font-semibold mb-4 ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>Seleccionar Usuario</h3>
+                        <h3 className={`text-lg font-semibold mb-4 ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>Seleccionar Rol</h3>
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                             <input
                                 type="text"
-                                placeholder="Buscar usuario..."
+                                placeholder="Buscar rol..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -155,13 +159,13 @@ const PermissionsPage = () => {
                     </div>
 
                     <div className="max-h-[500px] overflow-y-auto">
-                        {filteredUsers.length > 0 ? (
-                            filteredUsers.map((user) => (
+                        {filteredRoles.length > 0 ? (
+                            filteredRoles.map((role) => (
                                 <motion.div
-                                    key={user.id}
-                                    onClick={() => handleSelectUser(user)}
+                                    key={role.id}
+                                    onClick={() => handleSelectRole(role)}
                                     className={`group p-4 border-b cursor-pointer transition-colors ${
-                                        selectedUser?.id === user.id
+                                        selectedRole?.id === role.id
                                             ? 'bg-blue-50 border-l-4 border-l-blue-600'
                                             : 'hover:bg-gray-50'
                                     }`}
@@ -174,21 +178,20 @@ const PermissionsPage = () => {
                                                 background: "linear-gradient(135deg, var(--primary), var(--secondary))"
                                             }}
                                         >
-                                            {user.name.charAt(0)}
+                                            {String(role.name || '').charAt(0)}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p
                                                 className={`font-medium truncate ${
-                                                    selectedUser?.id === user.id
+                                                    selectedRole?.id === role.id
                                                         ? 'text-gray-900'
                                                         : (isDarkTheme ? 'text-white group-hover:text-gray-900' : 'text-gray-900')
                                                 }`}
                                             >
-                                                {user.name}
+                                                {role.name}
                                             </p>
-                                            <p className="text-sm text-gray-500 truncate">{user.email}</p>
                                             <p className="text-xs text-gray-400 mt-1">
-                                                {user.permissions?.length || 0} permisos
+                                                {role.permissions?.length || 0} permisos
                                             </p>
                                         </div>
                                     </div>
@@ -196,18 +199,18 @@ const PermissionsPage = () => {
                             ))
                         ) : (
                             <div className="p-8 text-center text-gray-500">
-                                No se encontraron usuarios
+                                No se encontraron roles
                             </div>
                         )}
                     </div>
                 </Card>
 
-                {/* Panel derecho - Permisos del usuario seleccionado */}
+                {/* Panel derecho - Permisos del rol seleccionado */}
                 <div className="lg:col-span-2">
                     <Card>
-                        {selectedUser ? (
+                        {selectedRole ? (
                             <div className="p-6">
-                                {/* Header del usuario */}
+                                {/* Header del rol */}
                                 <div className="flex items-center gap-4 mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg">
                                     <div
                                         className="w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold"
@@ -215,13 +218,13 @@ const PermissionsPage = () => {
                                             background: "linear-gradient(135deg, var(--primary), var(--secondary))"
                                         }}
                                     >
-                                        {selectedUser.name.charAt(0)}
+                                        {String(selectedRole.name || '').charAt(0)}
                                     </div>
                                     <div>
-                                        <h3 className="text-xl font-bold text-gray-900">{selectedUser.name}</h3>
-                                        <p className="text-gray-600">{selectedUser.email}</p>
+                                        <h3 className="text-xl font-bold text-gray-900">{selectedRole.name}</h3>
+                                        <p className="text-gray-600">{selectedRole.description || 'Sin descripcifn'}</p>
                                         <span className="inline-block mt-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
-                                            {typeof selectedUser.role === 'object' ? (selectedUser.role.name || selectedUser.role.id || '') : selectedUser.role}
+                                            {String(selectedRole.status || 'Activo')}
                                         </span>
                                     </div>
                                 </div>
@@ -313,10 +316,10 @@ const PermissionsPage = () => {
                             <div className="p-12 text-center">
                                 <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                                 <h3 className={`text-lg font-semibold mb-2 ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>
-                                    Selecciona un Usuario
+                                    Selecciona un Rol
                                 </h3>
                                 <p className="text-gray-600">
-                                    Elige un usuario de la lista para gestionar sus permisos
+                                    Elige un rol de la lista para gestionar sus permisos
                                 </p>
                             </div>
                         )}

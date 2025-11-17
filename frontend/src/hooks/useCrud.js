@@ -15,6 +15,10 @@ export default function useCrud(baseUrl, options = {}) {
       setLoading(true);
       setError('');
       const resp = await authFetch(baseUrl);
+      if (resp.status === 403) {
+        setError('No autorizado para listar estos datos');
+        return { success: false, error: 'forbidden' };
+      }
       if (!resp.ok) throw new Error('Error al listar');
       const data = await resp.json();
       const key = Object.keys(data).find(k => Array.isArray(data[k])) || 'items';

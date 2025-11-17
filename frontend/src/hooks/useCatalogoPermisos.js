@@ -30,6 +30,10 @@ export default function useCatalogoPermisos() {
         setLoading(true);
         setError('');
         const resp = await authFetch('http://localhost:5000/api/permissions');
+        if (resp.status === 403) {
+          setError('No autorizado para ver el catálogo de permisos');
+          return;
+        }
         if (!resp.ok) return;
         const data = await resp.json();
         if (!cancelado && Array.isArray(data.permissions)) {
@@ -59,6 +63,10 @@ export default function useCatalogoPermisos() {
       setLoading(true);
       setError('');
       const resp = await authFetch('http://localhost:5000/api/permissions');
+      if (resp.status === 403) {
+        setError('No autorizado para ver el catálogo de permisos');
+        return { success: false };
+      }
       if (!resp.ok) return { success: false };
       const data = await resp.json();
       if (Array.isArray(data.permissions)) {
