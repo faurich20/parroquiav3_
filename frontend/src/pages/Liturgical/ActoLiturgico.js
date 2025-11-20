@@ -14,6 +14,30 @@ import { ACTO_NOMBRES } from '../../constants/liturgical';
 import { useAuth } from '../../contexts/AuthContext';
 import { buildActionColumn } from '../../components/Common/ActionColumn';
 
+const deriveEndDateTime = (dateStr, timeStr) => {
+  if (!dateStr || !timeStr) {
+    return { date: dateStr, time: timeStr };
+  }
+
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  if ([year, month, day, hours, minutes].some((n) => Number.isNaN(n))) {
+    return { date: dateStr, time: timeStr };
+  }
+
+  const base = new Date(year, month - 1, day, hours, minutes, 0);
+  if (Number.isNaN(base.getTime())) {
+    return { date: dateStr, time: timeStr };
+  }
+
+  base.setHours(base.getHours() + 1);
+  const pad = (n) => n.toString().padStart(2, '0');
+  return {
+    date: `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}`,
+    time: `${pad(base.getHours())}:${pad(base.getMinutes())}`
+  };
+};
+
 const ActoLiturgico = () => {
   const { items, loading, error, list, createItem, updateItem, removeItem } = useLiturgicalActs({ autoList: true });
   useEffect(() => {
@@ -229,12 +253,13 @@ const ActoLiturgico = () => {
     if (!v.act_titulo || !v.act_titulo.trim()) return 'Ingrese el título';
     if (!v.h_fecha) return 'Ingrese la fecha inicial';
     if (!v.h_hora) return 'Ingrese la hora inicial';
-    if (!v.h_fecha_fin) return 'Ingrese la fecha final';
-    if (!v.h_hora_fin) return 'Ingrese la hora final';
+    const defaults = deriveEndDateTime(v.h_fecha, v.h_hora);
+    const fechaFin = v.h_fecha_fin || defaults.date;
+    const horaFin = v.h_hora_fin || defaults.time;
 
     try {
       const inicio = new Date(`${v.h_fecha}T${v.h_hora}:00`);
-      const fin = new Date(`${v.h_fecha_fin}T${v.h_hora_fin}:00`);
+      const fin = new Date(`${fechaFin}T${horaFin}:00`);
       if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
         return 'Fechas u horas inválidas';
       }
@@ -251,6 +276,10 @@ const ActoLiturgico = () => {
   const handleSubmit = async (values) => {
     try {
       const payload = { ...values };
+      const defaults = deriveEndDateTime(payload.h_fecha, payload.h_hora);
+      payload.h_fecha_fin = payload.h_fecha_fin || defaults.date;
+      payload.h_hora_fin = payload.h_hora_fin || defaults.time;
+
       if (payload.parroquiaid !== '' && payload.parroquiaid !== undefined) {
         payload.parroquiaid = Number(payload.parroquiaid);
       }

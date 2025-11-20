@@ -28,12 +28,20 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Función de geocoding con Nominatim y cache local
+// Función de geocoding con preferencia por coordenadas guardadas en BD
 const geocodeParroquia = async (parroquia) => {
-  const cacheKey = `coords_${parroquia.parroquiaid}`;
-  const cached = localStorage.getItem(cacheKey);
+  if (!parroquia) return getFallbackCoords('default');
+
+  const latFromDb = parseFloat(parroquia.par_latitud); 
+  const lngFromDb = parseFloat(parroquia.par_longitud); 
+  if (!Number.isNaN(latFromDb) && !Number.isNaN(lngFromDb)) { 
+    return { lat: latFromDb, lng: lngFromDb }; 
+  }
+  
+  const cacheKey = `coords_${parroquia.parroquiaid}`;  
+  const cached = localStorage.getItem(cacheKey);  
   if (cached) {
-    return JSON.parse(cached);
+    return JSON.parse(cached); 
   }
 
   try {
@@ -67,6 +75,36 @@ const getFallbackCoords = (distrito) => {
   return fallbacks[distrito] || fallbacks.default;
 };
 
+const DEFAULT_CENTER = [-6.7437, -79.8715];
+
+const VIEW_LABELS = {
+  month: 'Mes',
+  week: 'Semana',
+  day: 'Día',
+  agenda: 'Agenda'
+};
+
+const isEventFinished = (startDateStr, endDateStr, hasExplicitEnd = false) => {
+  if (!startDateStr) return false;
+  const today = startOfDay(new Date());
+  const startDate = startOfDay(new Date(startDateStr));
+
+  if (!hasExplicitEnd) {
+    return startDate < today;
+  }
+
+  if (!endDateStr) return false;
+  const endDate = startOfDay(new Date(endDateStr));
+  return endDate < today;
+};
+
+const eventCoversDate = (event, targetDate) => {
+  if (!event || !event.start) return false;
+  const startDate = startOfDay(event.start);
+  const endDate = event.end ? startOfDay(event.end) : startDate;
+  return targetDate >= startDate && targetDate <= endDate;
+};
+
 const createCustomIcon = (label) => {
   return L.divIcon({
     className: 'custom-marker',
@@ -88,6 +126,45 @@ const createCustomIcon = (label) => {
     iconAnchor: [17.5, 35],
     popupAnchor: [0, -35]
   });
+};
+
+const customMessages = {
+  next: 'Siguiente',
+  previous: 'Anterior',
+  today: 'Hoy',
+  month: 'Mes',
+  week: 'Semana',
+  day: 'Día',
+  agenda: 'Agenda',
+  date: 'Fecha',
+  time: 'Hora',
+  event: 'Evento',
+  noEventsInRange: 'No hay horarios programados en este rango',
+  allDay: 'Todo el día',
+  work_week: 'Semana laboral',
+  yesterday: 'Ayer',
+  tomorrow: 'Mañana',
+  thisWeek: 'Esta semana',
+  nextWeek: 'Próxima semana',
+  lastWeek: 'Semana pasada',
+  showMore: (total) => `+ Ver ${total} más`
+};
+
+const customFormats = {
+  dayFormat: 'EEEE d',
+  weekdayFormat: 'EEEE',
+  monthHeaderFormat: 'MMMM yyyy',
+  dayHeaderFormat: 'EEEE, d MMMM',
+  dayRangeHeaderFormat: ({ start, end }, culture, localizer) =>
+    `${localizer.format(start, 'd MMM', culture)} - ${localizer.format(end, 'd MMM', culture)}`,
+  agendaHeaderFormat: ({ start, end }, culture, localizer) =>
+    `${localizer.format(start, 'd MMM', culture)} - ${localizer.format(end, 'd MMM yyyy', culture)}`,
+  timeGutterFormat: 'HH:mm',
+  eventTimeRangeFormat: ({ start, end }, culture, localizer) =>
+    `${localizer.format(start, 'HH:mm', culture)} - ${localizer.format(end, 'HH:mm', culture)}`,
+  agendaTimeFormat: 'HH:mm',
+  agendaTimeRangeFormat: ({ start, end }, culture, localizer) =>
+    `${localizer.format(start, 'HH:mm', culture)} - ${localizer.format(end, 'HH:mm', culture)}`
 };
 
 // Configuración de localización para español
@@ -119,6 +196,7 @@ const Horarios = () => {
   const [personas, setPersonas] = useState([]);
   const [parroquiasCoords, setParroquiasCoords] = useState({});
   const [mapKey, setMapKey] = useState(0);
+  const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentData, setPaymentData] = useState({
     pago_medio: '',
@@ -189,9 +267,21 @@ const Horarios = () => {
         coordsMap[parroquiaid] = { coords, parroquia };
       });
       setParroquiasCoords(coordsMap);
+      const firstValid = results.find(({ coords }) => coords && !Number.isNaN(coords.lat) && !Number.isNaN(coords.lng));
+      setMapCenter(firstValid ? [firstValid.coords.lat, firstValid.coords.lng] : DEFAULT_CENTER);
+      setMapKey((prev) => prev + 1);
     };
     geocodeAllParroquias();
   }, [parroquias]);
+
+  useEffect(() => {
+    if (!selectedParroquia) return;
+    const entry = parroquiasCoords[selectedParroquia];
+    if (entry?.coords) {
+      setMapCenter([entry.coords.lat, entry.coords.lng]);
+      setMapKey((prev) => prev + 1);
+    }
+  }, [selectedParroquia, parroquiasCoords]);
 
   // Cargar horarios
   const loadHorarios = useCallback(async (parroquiaId = null, fecha = null) => {
@@ -445,24 +535,80 @@ const Horarios = () => {
     </div>
   ), []);
 
+  // Toolbar personalizada sin botón "Hoy"
+  const CustomToolbar = (toolbar) => {
+    const views = toolbar.views || ['month', 'week', 'day', 'agenda'];
+
+    const navBtnClass = 'px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors bg-white text-gray-600 border-gray-200 hover:border-[var(--primary)] hover:text-[var(--primary)]';
+
+    return (
+      <div className="rbc-toolbar flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+        <div className="rbc-btn-group flex gap-2">
+          <button
+            type="button"
+            onClick={() => toolbar.onNavigate('PREV')}
+            className={navBtnClass}
+          >
+            Anterior
+          </button>
+          <button
+            type="button"
+            onClick={() => toolbar.onNavigate('NEXT')}
+            className={navBtnClass}
+          >
+            Siguiente
+          </button>
+        </div>
+
+        <span className="rbc-toolbar-label text-lg font-semibold text-gray-700 text-center">
+          {toolbar.label}
+        </span>
+
+        <div className="rbc-btn-group flex flex-wrap gap-2">
+          {views.map((viewName) => (
+            <button
+              key={viewName}
+              type="button"
+              onClick={() => toolbar.onView(viewName)}
+              className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                toolbar.view === viewName
+                  ? 'bg-[var(--primary)] text-white border-[var(--primary)]'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-[var(--primary)] hover:text-[var(--primary)]'
+              }`}
+            >
+              {VIEW_LABELS[viewName] || viewName}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const openReservationModal = useCallback(({ dateStr, timeStr, horarioid, parroquiaid, actoNombre, actoTitulo }) => {
+    console.log('[Horarios] openReservationModal payload', { dateStr, timeStr, horarioid, parroquiaid, actoNombre, actoTitulo });
+    if (!dateStr) return;
+    setReservaData({
+      h_fecha: dateStr,
+      h_hora: timeStr || '',
+      horarioid: horarioid || '',
+      parroquiaid: parroquiaid || selectedParroquia || '',
+      acto_nombre: actoNombre || '',
+      acto_titulo: actoTitulo || '',
+      persona_nombre: '',
+      res_descripcion: '',
+      pago_estado: 'pendiente'
+    });
+    setReservaModalOpen(true);
+  }, [selectedParroquia]);
+
   // Confirmar creación de reserva
   const confirmReservation = useCallback(() => {
     if (pendingReservation) {
-      const { dateStr, timeStr, horarioid, parroquiaid } = pendingReservation;
-      setReservaData({
-        h_fecha: dateStr,
-        h_hora: timeStr,
-        horarioid: horarioid || '',
-        parroquiaid: parroquiaid || (selectedParroquia || ''), // PREFILL parroquia si viene del filtro
-        persona_nombre: '',
-        res_descripcion: '',
-        pago_estado: 'pendiente'
-      });
-      setReservaModalOpen(true);
+      openReservationModal(pendingReservation);
     }
     setConfirmOpen(false);
     setPendingReservation(null);
-  }, [pendingReservation, selectedParroquia]);
+  }, [pendingReservation, openReservationModal]);
 
   // REEMPLAZA handleSelectSlot por esta versión mejorada
   const handleSelectSlot = useCallback(({ start, end }) => {
@@ -472,6 +618,7 @@ const Horarios = () => {
     if (confirmOpen || noSchedulesOpen) return;
 
     try {
+      console.log('[Horarios] handleSelectSlot start', { start, end, eventsCount: events.length });
       const today = startOfDay(new Date());
       const selectedDate = startOfDay(start);
       if (isBefore(selectedDate, today)) return;
@@ -486,87 +633,110 @@ const Horarios = () => {
         } catch { return false; }
       });
 
-      if (!matchingEvent) {
-        // si no hay evento preciso pero sí hay eventos en el día, mostrar aviso o permitir crear sin horario
-        const hasEventsForDay = events.some(evt => startOfDay(evt.start).getTime() === selectedDate.getTime());
-        if (!hasEventsForDay) {
-          setNoSchedulesOpen(true);
-          return;
-        }
-
-        // Crear reserva sin horario (usuario escogerá)
-        setPendingReservation({ dateStr, timeStr, horarioid: null, parroquiaid: selectedParroquia || null });
-        setConfirmOpen(true);
+      if (matchingEvent) {
+        const raw = matchingEvent.raw || {};
+        const horarioId = raw.horarioid || matchingEvent.id;
+        const parroquiaId = raw.parroquiaid || raw.parroquia?.parroquiaid || selectedParroquia || null;
+        console.log('[Horarios] handleSelectSlot exact match', { horarioId, parroquiaId });
+        openReservationModal({
+          dateStr: raw.h_fecha || raw.date || dateStr,
+          timeStr: raw.h_hora || raw.time || timeStr,
+          horarioid: horarioId,
+          parroquiaid: parroquiaId,
+          actoNombre: raw.acto_nombre || raw.act_nombre || matchingEvent.type,
+          actoTitulo: raw.acto_titulo || matchingEvent.title
+        });
         return;
       }
 
-      // Si hay un evento exacto, pre-llenar con su horario y parroquia (si están disponibles)
-      const raw = matchingEvent.raw || {};
-      const horarioId = raw.horarioid || matchingEvent.id;
-      const parroquiaId = raw.parroquiaid || raw.parroquia?.parroquiaid || selectedParroquia || null;
+      const sameDayEvents = events
+        .filter(evt => {
+          if (!evt.start) return false;
+          const evtStart = startOfDay(evt.start);
+          if (evtStart.getTime() === selectedDate.getTime()) return true;
+          return eventCoversDate(evt, selectedDate);
+        })
+        .sort((a, b) => (a.start?.getTime() || 0) - (b.start?.getTime() || 0));
 
-      setPendingReservation({ dateStr, timeStr, horarioid: horarioId, parroquiaid: parroquiaId });
-      setConfirmOpen(true);
+      if (sameDayEvents.length === 0) {
+        setNoSchedulesOpen(true);
+        return;
+      }
+
+      const eventToUse = sameDayEvents[0];
+      const raw = eventToUse.raw || {};
+      const fallbackDate = eventToUse.start ? format(eventToUse.start, 'yyyy-MM-dd') : dateStr;
+      const fallbackTime = eventToUse.start ? format(eventToUse.start, 'HH:mm') : timeStr;
+      const horarioId = raw.horarioid || eventToUse.id;
+      const parroquiaId = raw.parroquiaid || raw.parroquia?.parroquiaid || selectedParroquia || null;
+      console.log('[Horarios] handleSelectSlot same-day fallback', { fallbackDate, fallbackTime, horarioId, parroquiaId });
+
+      openReservationModal({
+        dateStr: raw.h_fecha || raw.date || fallbackDate,
+        timeStr: raw.h_hora || raw.time || fallbackTime,
+        horarioid: horarioId,
+        parroquiaid: parroquiaId,
+        actoNombre: raw.acto_nombre || raw.act_nombre || eventToUse.type,
+        actoTitulo: raw.acto_titulo || eventToUse.title
+      });
     } catch (error) {
       console.error('Error en handleSelectSlot:', error);
     }
-  }, [confirmOpen, noSchedulesOpen, events, selectedParroquia]);
+  }, [confirmOpen, noSchedulesOpen, events, selectedParroquia, openReservationModal]);
 
   // Reemplazar handleSelectEvent por la versión que busca en `events` y normaliza campos
   const handleSelectEvent = useCallback((clicked) => {
     if (!clicked || !clicked.id) return;
-    if (confirmOpen) return;
 
     try {
-      const ev = events.find(e => String(e.id) === String(clicked.id));
-      if (!ev) {
+      console.log('[Horarios] handleSelectEvent click', clicked);
+      const ev = events.find(e => String(e.id) === String(clicked.id)) || clicked;
+      let payload = null;
+
+      if (ev) {
+        const raw = ev.raw || clicked.raw || {};
+        const explicitEnd = raw.h_fecha_fin || raw.date_end;
+        payload = {
+          dateStr: raw.h_fecha || raw.date || (ev.start ? format(ev.start, 'yyyy-MM-dd') : (clicked.start ? format(clicked.start, 'yyyy-MM-dd') : '')),
+          timeStr: raw.h_hora || raw.time || (ev.start ? format(ev.start, 'HH:mm') : (clicked.start ? format(clicked.start, 'HH:mm') : '')),
+          endDateStr: explicitEnd || (ev.end ? format(ev.end, 'yyyy-MM-dd') : (clicked.end ? format(clicked.end, 'yyyy-MM-dd') : undefined)),
+          hasExplicitEnd: Boolean(explicitEnd),
+          horarioid: raw.horarioid || raw.id || ev.id || clicked.id,
+          parroquiaid: raw.parroquiaid || raw.parroquia?.parroquiaid || selectedParroquia || null,
+          actoNombre: raw.acto_nombre || raw.act_nombre || ev.type || clicked.type,
+          actoTitulo: raw.acto_titulo || ev.title || clicked.title
+        };
+      }
+
+      if (!payload) {
         let fallback = (horarios || []).find(h => String(h.horarioid) === String(clicked.id));
         if (!fallback && items && items.length) {
           fallback = items.find(it => String(it.horarioid) === String(clicked.id) || String(it.id) === String(clicked.id));
         }
         if (fallback) {
-          const fecha = fallback.h_fecha || fallback.date;
-          const hora = fallback.h_hora || fallback.time;
-          if (fecha) {
-            const today = startOfDay(new Date());
-            const eventDate = startOfDay(new Date(fecha));
-            if (isBefore(eventDate, today)) return;
-            setPendingReservation({
-              dateStr: fecha,
-              timeStr: hora,
-              horarioid: fallback.horarioid || fallback.id,
-              parroquiaid: fallback.parroquiaid || (fallback.parroquia && (fallback.parroquia.parroquiaid || fallback.parroquia.id)) || selectedParroquia || null
-            });
-            setConfirmOpen(true);
-            return;
-          }
+          const explicitEnd = fallback.h_fecha_fin || fallback.date_end;
+          payload = {
+            dateStr: fallback.h_fecha || fallback.date || '',
+            timeStr: fallback.h_hora || fallback.time || '',
+            endDateStr: explicitEnd || '',
+            hasExplicitEnd: Boolean(explicitEnd),
+            horarioid: fallback.horarioid || fallback.id,
+            parroquiaid: fallback.parroquiaid || (fallback.parroquia && (fallback.parroquia.parroquiaid || fallback.parroquia.id)) || selectedParroquia || null,
+            actoNombre: fallback.acto_nombre || fallback.act_nombre || fallback.type,
+            actoTitulo: fallback.acto_titulo || fallback.title
+          };
         }
-        return;
       }
 
-      // ev puede provenir de 'horarios' o de 'items' mapeados; usar ev.raw si existe
-      const raw = ev.raw || {};
-      const fecha = raw.h_fecha || raw.date || (ev.start ? format(ev.start, 'yyyy-MM-dd') : '');
-      const hora = raw.h_hora || raw.time || (ev.start ? format(ev.start, 'HH:mm') : '');
-      const parroquiaId = raw.parroquiaid || raw.parroquia?.parroquiaid || selectedParroquia || null;
-      const horarioId = raw.horarioid || raw.id || ev.id;
+      if (!payload || !payload.dateStr) return;
+      if (isEventFinished(payload.dateStr, payload.endDateStr, payload.hasExplicitEnd)) return;
 
-      if (fecha) {
-        const today = startOfDay(new Date());
-        const eventDate = startOfDay(new Date(fecha));
-        if (isBefore(eventDate, today)) return;
-        setPendingReservation({
-          dateStr: fecha,
-          timeStr: hora,
-          horarioid: horarioId,
-          parroquiaid: parroquiaId
-        });
-        setConfirmOpen(true);
-      }
+      console.log('[Horarios] handleSelectEvent payload', payload);
+      openReservationModal(payload);
     } catch (err) {
       console.error('Error al abrir detalle del evento:', err);
     }
-  }, [confirmOpen, events, horarios, items, selectedParroquia]);
+  }, [events, horarios, items, selectedParroquia, openReservationModal]);
 
   // Función para renderizar campos del modal de reserva
   const renderField = (campo) => {
@@ -1113,13 +1283,61 @@ const Horarios = () => {
         </motion.button>
       </PageHeader>
 
-      {/* Filtro por Parroquia */}
-      <Card className="p-4">
-        <div className="flex items-center gap-3">
-          <label className="text-sm font-medium text-gray-700">Filtrar por Parroquia:</label>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <Card className="p-0 overflow-hidden">
+          <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
+            <div>
+              <h3 className="text-lg font-semibold" style={{ color: 'var(--text-strong)' }}>Mapa de Parroquias</h3>
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>Selecciona una parroquia para filtrar el calendario</p>
+            </div>
+            <span className="text-sm font-medium" style={{ color: 'var(--muted)' }}>
+              {Object.keys(parroquiasCoords).length || 0} parroquia(s)
+            </span>
+          </div>
+          <div className="h-[640px] w-full">
+            {Object.keys(parroquiasCoords).length ? (
+              <MapContainer
+                key={mapKey}
+                center={mapCenter}
+                zoom={12}
+                style={{ height: '100%', width: '100%' }}
+                scrollWheelZoom
+              >
+                <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                {Object.entries(parroquiasCoords).map(([id, val]) => (
+                  <Marker
+                    key={id}
+                    position={[val.coords.lat, val.coords.lng]}
+                    icon={createCustomIcon((val.parroquia.par_nombre || '⛪').charAt(0).toUpperCase() || '⛪')}
+                    eventHandlers={{
+                      click: () => {
+                        const label = `${val.parroquia.par_nombre} - ${val.parroquia.par_direccion} (${val.parroquia.dis_nombre})`;
+                        setParroquiaInput(label);
+                        handleParroquiaFilter(String(id));
+                      }
+                    }}
+                  >
+                    <Popup>
+                      <div className="text-sm">
+                        <div className="font-semibold">{val.parroquia.par_nombre}</div>
+                        <div className="text-gray-600">{val.parroquia.par_direccion}</div>
+                        <div className="text-gray-500 text-xs">{val.parroquia.dis_nombre}</div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+              </MapContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-sm" style={{ color: 'var(--muted)' }}>Cargando mapa...</p>
+              </div>
+            )}
+          </div>
+        </Card>
 
-          {/* Reemplazado select por EditableCombobox */}
-          <div style={{ width: 420 }}>
+        <div className="space-y-4">
+          <Card className="p-4">
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Filtrar por Parroquia</label>
             <EditableCombobox
               value={parroquiaInput}
               onChange={handleParroquiaInputChange}
@@ -1127,146 +1345,98 @@ const Horarios = () => {
               placeholder="Escriba o seleccione una parroquia..."
               id="filter-parroquia"
             />
-          </div>
+          </Card>
 
+          
+
+          <Card className="p-5 overflow-hidden">
+            <div className="h-[520px] w-full overflow-hidden">
+              {events.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center max-w-md">
+                    <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                    <h3 className="text-lg font-semibold text-gray-700 mb-2">No hay actos litúrgicos programados</h3>
+                    <p className="text-gray-500 mb-6">
+                      No hay horarios programados en el rango visible. Realiza tu primera reserva para comenzar.
+                    </p>
+                    <motion.button
+                      onClick={() => navigate('/liturgico/reservas?from=calendar')}
+                      className="text-white px-5 py-2.5 rounded-lg font-medium flex items-center gap-2 mx-auto transition-all hover:brightness-110 shadow-md"
+                      style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <Calendar className="w-5 h-5" />
+                      Realizar Primera Reserva
+                    </motion.button>
+                  </div>
+                </div>
+              ) : (
+                <BigCalendar
+                  localizer={localizer}
+                  events={events}
+                  startAccessor="start"
+                  endAccessor="end"
+                  style={{ height: '50%' }}
+                  view={view}
+                  onView={setView}
+                  date={date}
+                  onNavigate={setDate}
+                  defaultView="month"
+                  views={['month', 'week', 'day', 'agenda']}
+                  messages={customMessages}
+                  eventPropGetter={eventStyleGetter}
+                  components={{ event: EventComponent, toolbar: CustomToolbar }}
+                  selectable
+                  onSelectSlot={handleSelectSlot}
+                  onSelectEvent={handleSelectEvent}
+                  culture="es"
+                  formats={customFormats}
+                  popup
+                  popupOffset={{ x: 0, y: 5 }}
+                  step={30}
+                  timeslots={2}
+                  min={new Date(2024, 0, 1, 6, 0, 0)}
+                  max={new Date(2024, 0, 1, 22, 0, 0)}
+                />
+              )}
+            </div>
+          </Card>
         </div>
-      </Card>
+      </div>
 
-      {/* Leyenda de tipos de actos */}
       <Card className="p-4">
-        <div className="flex flex-wrap gap-4 items-center">
-          <span className="text-sm font-medium text-gray-700">Tipos de actos:</span>
-          {Object.entries(LITURGICAL_TYPES).map(([key, value]) => (
-            <div key={key} className="flex items-center gap-2">
-              <div
-                className="w-4 h-4 rounded"
-                style={{ backgroundColor: value.color }}
-              />
-              <span className="text-sm text-gray-600">{value.label}</span>
+            <div className="flex flex-wrap gap-4 items-center">
+              <span className="text-sm font-medium text-gray-700">Tipos de actos:</span>
+              {Object.entries(LITURGICAL_TYPES).map(([key, value]) => (
+                <div key={key} className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded" style={{ backgroundColor: value.color }} />
+                  <span className="text-sm text-gray-600">{value.label}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
       </Card>
 
-      {/* Calendario */}
-      <Card className="p-6">
-        <div className="h-[750px]">
-          {events.length === 0 ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center max-w-md">
-                <Calendar className="w-20 h-20 mx-auto mb-4 text-gray-300" />
-                <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                  No hay actos litúrgicos programados
-                </h3>
-                <p className="text-gray-500 mb-6">
-                  No hay horarios programados en el rango visible. Realiza tu primera reserva para comenzar.
-                </p>
-                <motion.button
-                  onClick={() => navigate('/liturgico/reservas?from=calendar')}
-                  className="text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 mx-auto transition-all hover:brightness-110 shadow-md"
-                  style={{ 
-                    background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' 
-                  }}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Calendar className="w-5 h-5" />
-                  Realizar Primera Reserva
-                </motion.button>
-              </div>
-            </div>
-          ) : (
-            <BigCalendar
-              localizer={localizer}
-              events={events}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: '100%' }}
-              view={view}
-              onView={setView}
-              date={date}
-              onNavigate={setDate}
-              defaultView="month"
-              views={['month', 'week', 'day', 'agenda']}
-              messages={{
-                next: "Siguiente",
-                previous: "Anterior",
-                today: "Hoy",
-                month: "Mes",
-                week: "Semana",
-                day: "Día",
-                agenda: "Agenda",
-                date: "Fecha",
-                time: "Hora",
-                event: "Evento",
-                noEventsInRange: "No hay horarios programados en este rango",
-                allDay: "Todo el día",
-                work_week: "Semana laboral",
-                yesterday: "Ayer",
-                tomorrow: "Mañana",
-                thisWeek: "Esta semana",
-                nextWeek: "Próxima semana",
-                lastWeek: "Semana pasada",
-                showMore: total => `+ Ver ${total} más`,
-              }}
-              eventPropGetter={eventStyleGetter}
-              components={{
-                event: EventComponent
-              }}
-              selectable
-              onSelectSlot={handleSelectSlot}
-              onSelectEvent={handleSelectEvent}
-              culture="es"
-              formats={{
-                dayFormat: 'EEEE d',
-                weekdayFormat: 'EEEE',
-                monthHeaderFormat: 'MMMM yyyy',
-                dayHeaderFormat: 'EEEE, d MMMM',
-                dayRangeHeaderFormat: ({ start, end }, culture, localizer) =>
-                  `${localizer.format(start, 'd MMM', culture)} - ${localizer.format(end, 'd MMM', culture)}`,
-                agendaHeaderFormat: ({ start, end }, culture, localizer) =>
-                  `${localizer.format(start, 'd MMM', culture)} - ${localizer.format(end, 'd MMM yyyy', culture)}`,
-                timeGutterFormat: 'HH:mm',
-                eventTimeRangeFormat: ({ start, end }, culture, localizer) =>
-                  `${localizer.format(start, 'HH:mm', culture)} - ${localizer.format(end, 'HH:mm', culture)}`,
-                agendaTimeFormat: 'HH:mm',
-                agendaTimeRangeFormat: ({ start, end }, culture, localizer) =>
-                  `${localizer.format(start, 'HH:mm', culture)} - ${localizer.format(end, 'HH:mm', culture)}`,
-              }}
-              popup
-              popupOffset={{ x: 0, y: 5 }}
-              step={30}
-              timeslots={2}
-              min={new Date(2024, 0, 1, 6, 0, 0)}
-              max={new Date(2024, 0, 1, 22, 0, 0)}
-            />
-          )}
-        </div>
-      </Card>
-
-      {/* Información adicional */}
-      {events.length > 0 && (
-        <Card className="p-4">
-          <div className="flex items-center justify-between text-sm text-gray-600">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4" />
-              <span>
-                Mostrando {events.length} horario{events.length !== 1 ? 's' : ''} programado{events.length !== 1 ? 's' : ''}
-              </span>
-            </div>
-            <motion.button
-              onClick={refetch}
-              className="flex items-center gap-2 font-medium transition-colors"
-              style={{ color: 'var(--primary)' }}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <RefreshCw className="w-4 h-4" />
-              Actualizar
-            </motion.button>
+      <Card className="p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 text-sm text-gray-600">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4" />
+            <span>
+              Mostrando {events.length} horario{events.length !== 1 ? 's' : ''} programado{events.length !== 1 ? 's' : ''}
+            </span>
           </div>
-        </Card>
-      )}
+          <motion.button
+            onClick={refetch}
+            className="flex items-center gap-2 font-medium transition-colors"
+            style={{ color: 'var(--primary)' }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <RefreshCw className="w-4 h-4" />
+            Actualizar
+          </motion.button>
+        </div>
+      </Card>
 
       {/* Modal de Nueva Reserva -> ahora usa ModalReserva */}
       <ModalReserva

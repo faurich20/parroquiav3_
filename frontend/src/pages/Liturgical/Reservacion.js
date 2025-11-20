@@ -25,8 +25,16 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Función de geocoding con Nominatim y cache local
+// Función de geocoding con preferencia por coordenadas guardadas y cache local
 const geocodeParroquia = async (parroquia) => {
+  if (!parroquia) return getFallbackCoords('default');
+
+  const latFromDb = parseFloat(parroquia.par_latitud);
+  const lngFromDb = parseFloat(parroquia.par_longitud);
+  if (!Number.isNaN(latFromDb) && !Number.isNaN(lngFromDb)) {
+    return { lat: latFromDb, lng: lngFromDb };
+  }
+
   const cacheKey = `coords_${parroquia.parroquiaid}`;
 
   // Verificar cache local primero

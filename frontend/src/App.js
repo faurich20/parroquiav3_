@@ -66,6 +66,46 @@ const RequirePermission = ({ perm, children }) => {
   return allowed ? children : <Navigate to="/bienvenida" replace />;
 };
 
+const securityRoutes = [
+  { path: '/seguridad/usuarios', perms: ['seguridad_usuarios', 'seguridad'] },
+  { path: '/seguridad/roles', perms: ['seguridad_roles', 'seguridad'] },
+  { path: '/seguridad/permisos', perms: ['seguridad_permisos', 'seguridad'] },
+  { path: '/seguridad/parroquias', perms: ['seguridad_parroquias', 'seguridad'] }
+];
+
+const SecurityEntry = () => {
+  const { hasPermission } = useAuth();
+
+  const target = securityRoutes.find((route) =>
+    route.perms.some((perm) => hasPermission(perm))
+  );
+
+  if (target) {
+    return <Navigate to={target.path} replace />;
+  }
+
+  return <Navigate to="/bienvenida" replace />;
+};
+
+const reportsRoutes = [
+  { path: '/reportes/gerenciales', perms: ['reportes_gerenciales', 'reportes'] },
+  { path: '/reportes/transaccionales', perms: ['reportes_transaccionales', 'reportes'] }
+];
+
+const ReportsEntry = () => {
+  const { hasPermission } = useAuth();
+
+  const target = reportsRoutes.find((route) =>
+    route.perms.some((perm) => hasPermission(perm))
+  );
+
+  if (target) {
+    return <Navigate to={target.path} replace />;
+  }
+
+  return <Navigate to="/bienvenida" replace />;
+};
+
 // Entrada de módulo litúrgico: redirige a la primera subruta permitida
 const LiturgicalEntry = () => {
   const { hasPermission } = useAuth();
@@ -102,10 +142,26 @@ const App = () => {
             <Route path="/compras" element={<RequirePermission perm="compras"><Purchases /></RequirePermission>} />
             <Route path="/almacen" element={<RequirePermission perm="almacen"><Warehouse /></RequirePermission>} />
             <Route path="/configuracion" element={<RequirePermission perm="configuracion"><Configuration /></RequirePermission>} />
+            <Route
+              path="/seguridad"
+              element={
+                <RequirePermission perm={['seguridad', 'seguridad_usuarios', 'seguridad_roles', 'seguridad_permisos', 'seguridad_parroquias']}>
+                  <SecurityEntry />
+                </RequirePermission>
+              }
+            />
             <Route path="/seguridad/usuarios" element={<RequirePermission perm="seguridad"><UsersPage /></RequirePermission>} />
             <Route path="/seguridad/roles" element={<RequirePermission perm="seguridad"><RolesPage /></RequirePermission>} />
             <Route path="/seguridad/permisos" element={<RequirePermission perm="seguridad"><PermissionsPage /></RequirePermission>} />
             <Route path="/seguridad/parroquias" element={<RequirePermission perm="seguridad"><ParroquiasPage /></RequirePermission>} />
+            <Route
+              path="/reportes"
+              element={
+                <RequirePermission perm={['reportes', 'reportes_gerenciales', 'reportes_transaccionales']}>
+                  <ReportsEntry />
+                </RequirePermission>
+              }
+            />
             <Route
               path="/liturgico"
               element={

@@ -1114,6 +1114,7 @@ def get_calendario():
                 h.created_at as horario_created_at,
                 a.act_nombre,
                 a.act_titulo,
+                a.parroquiaid,
                 p.par_nombre as parroquia_nombre,
                 COUNT(r.reservaid) as reservas_count,
                 COUNT(CASE WHEN COALESCE(pg.pago_estado, 'pendiente') IN ('pendiente', 'pagado') THEN 1 END) as reservas_activas_count,
@@ -1127,7 +1128,7 @@ def get_calendario():
             WHERE h.h_fecha >= CURRENT_DATE - INTERVAL '30 days'
               AND h.h_fecha < CURRENT_DATE + INTERVAL '60 days'
               AND a.act_estado = TRUE
-            GROUP BY h.h_fecha, h.h_hora, a.act_nombre, a.act_titulo, p.par_nombre, h.horarioid, a.actoliturgicoid
+            GROUP BY h.h_fecha, h.h_hora, a.act_nombre, a.act_titulo, a.parroquiaid, p.par_nombre, h.horarioid, a.actoliturgicoid
             ORDER BY h.h_fecha, h.h_hora
         """)).fetchall()
 
@@ -1140,6 +1141,7 @@ def get_calendario():
                 'time_end': row.h_hora_fin.strftime('%H:%M') if row.h_hora_fin else None,
                 'type': row.act_nombre,
                 'title': row.act_titulo,
+                'parroquiaid': row.parroquiaid,
                 'location': row.parroquia_nombre,
                 'reservas_count': row.reservas_count,
                 'reservas_activas_count': row.reservas_activas_count,

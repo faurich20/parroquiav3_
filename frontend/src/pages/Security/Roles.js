@@ -347,7 +347,7 @@ const RolesPage = () => {
       <DialogoConfirmacion
         abierto={confirmOpen}
         titulo="Eliminar rol"
-        mensaje="�Est�s seguro de eliminar este rol? Esta acci�n no se puede deshacer."
+        mensaje="¿Estás seguro de eliminar este rol? Esta acción no se puede deshacer."
         onConfirmar={confirmDeleteRole}
         onCancelar={() => {
           setConfirmOpen(false);

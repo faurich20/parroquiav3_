@@ -26,8 +26,17 @@ const getFallbackCoords = (distrito) => {
   return fallbacks[distrito] || fallbacks.default;
 };
 
+const DEFAULT_CENTER = [-6.7437, -79.8715];
+
 const geocodeParroquia = async (parroquia) => {
   if (!parroquia) return getFallbackCoords('default');
+
+  const latFromDb = parseFloat(parroquia.par_latitud);
+  const lngFromDb = parseFloat(parroquia.par_longitud);
+  if (!Number.isNaN(latFromDb) && !Number.isNaN(lngFromDb)) {
+    return { lat: latFromDb, lng: lngFromDb };
+  }
+
   const cacheKey = `coords_${parroquia.parroquiaid}`;
   const cached = localStorage.getItem(cacheKey);
   if (cached) return JSON.parse(cached);
@@ -74,6 +83,7 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
   const [horarios, setHorarios] = useState([]);
   const [coordsMap, setCoordsMap] = useState({});
   const [mapKey, setMapKey] = useState(0);
+  const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [payment, setPayment] = useState({ pago_medio:'', pago_monto:'', cardNumber:'', expiryDate:'', cvv:'', cardHolder:'' });
 
@@ -149,6 +159,12 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
       const map = {};
       results.forEach(r => { map[r.id] = { coords: r.coords, parroquia: r.parroquia }; });
       setCoordsMap(map);
+      const firstValid = results.find(r => r.coords && !Number.isNaN(r.coords.lat) && !Number.isNaN(r.coords.lng));
+      if (firstValid) {
+        setMapCenter([firstValid.coords.lat, firstValid.coords.lng]);
+      } else {
+        setMapCenter(DEFAULT_CENTER);
+      }
       setMapKey(k => k + 1);
     };
     geocodeAll();
@@ -365,13 +381,13 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
           <div className="flex items-center gap-2 text-lg font-semibold text-gray-700"><span className="text-2xl">🗺️</span> Ubicación de Parroquias</div>
           <div className="rounded-lg overflow-hidden border border-gray-200">
             <div style={{ height: 600 }} className="w-full">
-              <MapContainer key={mapKey} center={[-6.7437, -79.8715]} zoom={10} style={{ height:'100%', width:'100%' }} scrollWheelZoom>
+              <MapContainer key={mapKey} center={mapCenter} zoom={10} style={{ height:'100%', width:'100%' }} scrollWheelZoom>
                 <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 {Object.entries(coordsMap).map(([id, val]) => (
                   <Marker
                     key={id}
                     position={[val.coords.lat, val.coords.lng]}
-                    icon={createCustomIcon('⛪')}
+                    icon={createCustomIcon((val.parroquia.par_nombre || '⛪').charAt(0).toUpperCase() || '⛪')}
                     eventHandlers={{
                       click: () => {
                         const label = `${val.parroquia.par_nombre} - ${val.parroquia.par_direccion} (${val.parroquia.dis_nombre})`;
