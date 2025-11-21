@@ -14,7 +14,7 @@ export default function useLiturgicalCalendar() {
     try {
       const response = await authFetch('http://localhost:5000/api/liturgical/calendario');
       if (response.status === 403) {
-        setError('No autorizado para ver el calendario litúrgico');
+        setError('No autorizado para ver el Selecciona tus Horarios');
         setItems([]);
         return;
       }

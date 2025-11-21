@@ -75,19 +75,19 @@ const ActoLiturgico = () => {
     };
   }, [authFetch]);
 
-  // Detectar navegación desde el calendario y abrir automáticamente el modal
+  // Detectar navegación desde el calendario y abrir automáticamente el modal "Nuevo Acto"
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     if (searchParams.get('from') === 'calendar') {
-      setCurrent({ act_estado: true });
-      setModalMode('add');
-      setModalOpen(true);
+      // Aquí podrías, si quieres, leer otros params (fecha, parroquia, etc.) y pasarlos a openActoModal
+      openActoModal();
 
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('from');
       window.history.replaceState({}, '', newUrl.toString());
     }
   }, [location.search]);
+
 
   // Asegurar que el perfil tenga persona/parroquia cargada
   useEffect(() => {
@@ -154,9 +154,8 @@ const ActoLiturgico = () => {
         align: 'center',
         render: (r) => (
           <span
-            className={`px-2 py-0.5 rounded-lg text-xs font-medium ${
-              r.act_estado ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-            }`}
+            className={`px-2 py-0.5 rounded-lg text-xs font-medium ${r.act_estado ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+              }`}
           >
             {r.act_estado ? 'Activo' : 'Inactivo'}
           </span>
@@ -175,19 +174,19 @@ const ActoLiturgico = () => {
       buildActionColumn({
         onEdit: canEdit
           ? (row) => {
-              setCurrent(row);
-              setModalMode('edit');
-              setModalOpen(true);
-            }
+            setCurrent(row);
+            setModalMode('edit');
+            setModalOpen(true);
+          }
           : null,
         onDelete: canDelete ? (row) => handleDelete(row) : null,
         onView: canViewDetail
           ? (row) => {
             console.log('[ActoLiturgico] Ver más row:', row);
-              setCurrent(row);
-              setModalMode('view');
-              setModalOpen(true);
-            }
+            setCurrent(row);
+            setModalMode('view');
+            setModalOpen(true);
+          }
           : null,
         width: '30%',
       }),
@@ -272,6 +271,8 @@ const ActoLiturgico = () => {
 
     return '';
   };
+
+
 
   const handleSubmit = async (values) => {
     try {

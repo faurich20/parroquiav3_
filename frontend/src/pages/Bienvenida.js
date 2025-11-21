@@ -9,7 +9,7 @@ import { useAuth } from "../contexts/AuthContext";
 // Definición de módulos del menú principal y permisos requeridos por módulo
 const modules = [
   {
-    name: "Módulo de Seguridad",
+    name: "Módulo de Gestión",
     path: "/seguridad/usuarios",
     icon: Shield,
     color: "from-blue-500 to-indigo-500",

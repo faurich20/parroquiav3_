@@ -18,7 +18,10 @@ class Config:
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=7)
     
     JWT_ERROR_MESSAGE_KEY = 'error'
-    CORS_ORIGINS = ['http://localhost:3000']
+    CORS_ORIGINS = [
+        'http://localhost:3000',
+    'https://therese-unlamented-laryngoscopically.ngrok-free.dev'
+        ]
     
     # ✅ NUEVA CONFIGURACIÓN PARA FLASK-JWT-EXTENDED
     JWT_IDENTITY_CLAIM = 'sub'  # Asegurar que use 'sub' como claim de identidad

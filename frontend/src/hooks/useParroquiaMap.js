@@ -11,19 +11,10 @@ if (L.Icon?.Default) {
   });
 }
 
-const FALLBACK_COORDS = {
-  LAMBAYEQUE: { lat: -6.7063, lng: -79.9066 },
-  CHICLAYO: { lat: -6.7651, lng: -79.8542 },
-  'JOSE LEONARDO ORTIZ': { lat: -6.7596, lng: -79.8538 },
-  default: { lat: -6.7714, lng: -79.8409 }
-};
-
-const getFallbackCoords = (distrito) => FALLBACK_COORDS[distrito?.toUpperCase?.()] || FALLBACK_COORDS.default;
-
 export const DEFAULT_CENTER = [-6.7437, -79.8715];
 
 export const geocodeParroquia = async (parroquia) => {
-  if (!parroquia) return getFallbackCoords('default');
+  if (!parroquia) return null;
 
   const latFromDb = parseFloat(parroquia.par_latitud);
   const lngFromDb = parseFloat(parroquia.par_longitud);
@@ -59,7 +50,7 @@ export const geocodeParroquia = async (parroquia) => {
     // Ignorar errores de red/geocoding
   }
 
-  return getFallbackCoords(parroquia.dis_nombre);
+  return null;
 };
 
 export const useParroquiaCoords = (parroquias = [], selectedParroquiaId = null) => {

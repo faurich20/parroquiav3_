@@ -3,6 +3,7 @@ import { Calendar as BigCalendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, isBefore, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Clock, Plus, Calendar, AlertCircle, RefreshCw } from 'lucide-react';
+import ActoLiturgicoModal from '../../components/Modals/ModalActoLiturgico';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../../components/Common/PageHeader';
@@ -30,26 +31,22 @@ L.Icon.Default.mergeOptions({
 
 // Función de geocoding con preferencia por coordenadas guardadas en BD
 const geocodeParroquia = async (parroquia) => {
-  if (!parroquia) return getFallbackCoords('default');
-
-  const latFromDb = parseFloat(parroquia.par_latitud); 
-  const lngFromDb = parseFloat(parroquia.par_longitud); 
-  if (!Number.isNaN(latFromDb) && !Number.isNaN(lngFromDb)) { 
-    return { lat: latFromDb, lng: lngFromDb }; 
+  if (!parroquia) return null;
+  const latFromDb = parseFloat(parroquia.par_latitud);
+  const lngFromDb = parseFloat(parroquia.par_longitud);
+  if (!Number.isNaN(latFromDb) && !Number.isNaN(lngFromDb)) {
+    return { lat: latFromDb, lng: lngFromDb };
   }
-  
-  const cacheKey = `coords_${parroquia.parroquiaid}`;  
-  const cached = localStorage.getItem(cacheKey);  
+  const cacheKey = `coords_${parroquia.parroquiaid}`;
+  const cached = localStorage.getItem(cacheKey);
   if (cached) {
-    return JSON.parse(cached); 
+    return JSON.parse(cached);
   }
-
   try {
     const query = `${parroquia.par_direccion}, ${parroquia.dis_nombre}, Lambayeque, Perú`;
     const encodedQuery = encodeURIComponent(query);
     const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=1`);
     const data = await response.json();
-
     if (data && data.length > 0) {
       const coords = {
         lat: parseFloat(data[0].lat),
@@ -61,18 +58,7 @@ const geocodeParroquia = async (parroquia) => {
   } catch (error) {
     console.error('Error en geocoding:', error);
   }
-
-  return getFallbackCoords(parroquia.dis_nombre);
-};
-
-const getFallbackCoords = (distrito) => {
-  const fallbacks = {
-    'LAMBAYEQUE': { lat: -6.7063, lng: -79.9066 },
-    'CHICLAYO': { lat: -6.7651, lng: -79.8542 },
-    'JOSE LEONARDO ORTIZ': { lat: -6.7596, lng: -79.8538 },
-    'default': { lat: -6.7714, lng: -79.8409 }
-  };
-  return fallbacks[distrito] || fallbacks.default;
+  return null;
 };
 
 const DEFAULT_CENTER = [-6.7437, -79.8715];
@@ -128,6 +114,8 @@ const createCustomIcon = (label) => {
   });
 };
 
+const CALENDAR_STYLE_ID = 'horarios-calendar-styles';
+
 const customMessages = {
   next: 'Siguiente',
   previous: 'Anterior',
@@ -181,9 +169,47 @@ const Horarios = () => {
   const { items, loading, error, refetch } = useLiturgicalCalendar();
   const { createItem } = useLiturgicalReservations({ autoList: false });
   const { user, authFetch } = useAuth();
+  const navigate = useNavigate();
+
+  // Efecto para los estilos del calendario
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    let styleEl = document.getElementById(CALENDAR_STYLE_ID);
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = CALENDAR_STYLE_ID;
+      styleEl.textContent = `
+        .horarios-calendar .rbc-toolbar {
+          flex-wrap: wrap;
+          gap: 0.75rem;
+        }
+        .horarios-calendar .rbc-month-row {
+          min-height: 70px;
+        }
+        .horarios-calendar .rbc-month-view {
+          font-size: 0.9rem;
+        }
+        .horarios-calendar .rbc-header {
+          padding: 4px 0;
+          font-size: 0.85rem;
+        }
+        .horarios-calendar .rbc-date-cell {
+          padding: 3px 4px;
+        }
+      `;
+      document.head.appendChild(styleEl);
+    }
+
+    return () => {
+      const existing = document.getElementById(CALENDAR_STYLE_ID);
+      if (existing) {
+        existing.remove();
+      }
+    };
+  }, []);
+
   const [view, setView] = useState('month');
   const [date, setDate] = useState(new Date());
-  const navigate = useNavigate();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingReservation, setPendingReservation] = useState(null);
   const [noSchedulesOpen, setNoSchedulesOpen] = useState(false);
@@ -192,7 +218,22 @@ const Horarios = () => {
   const [reservaModalOpen, setReservaModalOpen] = useState(false);
   const [reservaData, setReservaData] = useState({});
   const [parroquias, setParroquias] = useState([]);
+  const [pendingActoLiturgico, setPendingActoLiturgico] = useState(null);
   const [horarios, setHorarios] = useState([]);
+  
+  // Estados para el modal de acto litúrgico
+  const [actoLiturgicoModalOpen, setActoLiturgicoModalOpen] = useState(false);
+  const [actoLiturgicoData, setActoLiturgicoData] = useState({
+    acto_nombre: '',
+    act_titulo: '',
+    act_descripcion: '',
+    h_fecha: '',
+    h_hora: '',
+    h_fecha_fin: '',
+    h_hora_fin: '',
+    act_estado: true,
+    parroquiaid: ''
+  });
   const [personas, setPersonas] = useState([]);
   const [parroquiasCoords, setParroquiasCoords] = useState({});
   const [mapKey, setMapKey] = useState(0);
@@ -209,9 +250,26 @@ const Horarios = () => {
 
   // Filtro por parroquia para el calendario
   const [selectedParroquia, setSelectedParroquia] = useState('');
-
   // Entrada editable para el filtro de parroquia
   const [parroquiaInput, setParroquiaInput] = useState('');
+  // Abre el modal de creación de un Acto Litúrgico con valores iniciales opcionales
+  const openActoModal = (preset = {}) => {
+    const initial = {
+      parroquiaid: preset.parroquiaid ?? '',
+      act_nombre: preset.act_nombre ?? '',
+      act_titulo: preset.act_titulo ?? '',
+      act_descripcion: preset.act_descripcion ?? '',
+      h_fecha: preset.h_fecha ?? '',
+      h_hora: preset.h_hora ?? '',
+      h_fecha_fin: preset.h_fecha_fin ?? '',
+      h_hora_fin: preset.h_hora_fin ?? '',
+      act_estado: true,
+    };
+
+    setCurrent(initial);
+    setModalMode('add');
+    setModalOpen(true);
+  };
 
   // Opciones preparadas para el combobox (label/value)
   const parroquiasOptions = useMemo(() => (
@@ -220,7 +278,6 @@ const Horarios = () => {
       label: `${p.par_nombre} - ${p.par_direccion} (${p.dis_nombre})`
     }))
   ), [parroquias]);
-
   // Cargar parroquias
   useEffect(() => {
     const loadParroquias = async () => {
@@ -358,146 +415,146 @@ const Horarios = () => {
 
   // Mapear los datos (si hay filtro por parroquia usamos `horarios`, sino usamos `items`)
   const events = useMemo(() => {
-	// Helper: extrae el id de parroquia desde varias formas posibles
-	const extractParroquiaId = (obj) => {
-		if (!obj) return '';
-		// campos directos
-		if (obj.parroquiaid) return String(obj.parroquiaid);
-		if (obj.parroquia_id) return String(obj.parroquia_id);
-		if (obj.parid) return String(obj.parid);
-		// objeto anidado (por ejemplo: { parroquia: { parroquiaid: ... } })
-		if (obj.parroquia && (obj.parroquia.parroquiaid || obj.parroquia.id)) {
-			return String(obj.parroquia.parroquiaid ?? obj.parroquia.id);
-		}
-		// fallback a posible campo en 'raw'
-		if (obj.raw) {
-			return extractParroquiaId(obj.raw);
-		}
-		return '';
-	};
+    // Helper: extrae el id de parroquia desde varias formas posibles
+    const extractParroquiaId = (obj) => {
+      if (!obj) return '';
+      // campos directos
+      if (obj.parroquiaid) return String(obj.parroquiaid);
+      if (obj.parroquia_id) return String(obj.parroquia_id);
+      if (obj.parid) return String(obj.parid);
+      // objeto anidado (por ejemplo: { parroquia: { parroquiaid: ... } })
+      if (obj.parroquia && (obj.parroquia.parroquiaid || obj.parroquia.id)) {
+        return String(obj.parroquia.parroquiaid ?? obj.parroquia.id);
+      }
+      // fallback a posible campo en 'raw'
+      if (obj.raw) {
+        return extractParroquiaId(obj.raw);
+      }
+      return '';
+    };
 
-	const sourceIsHorarios = !!selectedParroquia;
+    const sourceIsHorarios = !!selectedParroquia;
 
-	if (sourceIsHorarios) {
-		// Si la API devolvió horarios para la parroquia, úsalos
-		if (horarios && horarios.length > 0) {
-      return horarios
-        .map(h => {
-          try {
-            const eventDate = h.h_fecha;
-            const eventTime = h.h_hora;
-            if (!eventDate || !eventTime) return null;
+    if (sourceIsHorarios) {
+      // Si la API devolvió horarios para la parroquia, úsalos
+      if (horarios && horarios.length > 0) {
+        return horarios
+          .map(h => {
+            try {
+              const eventDate = h.h_fecha;
+              const eventTime = h.h_hora;
+              if (!eventDate || !eventTime) return null;
 
-            const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
-            if (isNaN(startDateTime.getTime())) return null;
+              const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
+              if (isNaN(startDateTime.getTime())) return null;
 
-            // Usar fecha/hora fin si vienen; si no, 1 hora después
-            const endDateStr = h.h_fecha_fin || eventDate;
-            const endTimeStr = h.h_hora_fin || eventTime;
-            let endDateTime = new Date(`${endDateStr}T${endTimeStr}:00`);
-            if (isNaN(endDateTime.getTime()) || endDateTime < startDateTime) {
-              endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+              // Usar fecha/hora fin si vienen; si no, 1 hora después
+              const endDateStr = h.h_fecha_fin || eventDate;
+              const endTimeStr = h.h_hora_fin || eventTime;
+              let endDateTime = new Date(`${endDateStr}T${endTimeStr}:00`);
+              if (isNaN(endDateTime.getTime()) || endDateTime < startDateTime) {
+                endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+              }
+
+              return {
+                id: h.horarioid,
+                title: h.acto_titulo || h.acto_nombre || h.act_nombre || 'Sin título',
+                start: startDateTime,
+                end: endDateTime,
+                location: h.parroquia_nombre || h.par_nombre || 'Sin ubicación',
+                type: h.acto_nombre || h.act_nombre || h.acto_tipo || h.type || 'misa',
+                allDay: false,
+                reservas_count: h.reservas_count || 0,
+                reservas_activas_count: h.reservas_activas_count || 0,
+                raw: h,
+              };
+            } catch (err) {
+              console.error('Error procesando horario (horarios):', h, err);
+              return null;
             }
+          })
+          .filter(Boolean);
+      }
 
-            return {
-              id: h.horarioid,
-              title: h.acto_titulo || h.acto_nombre || h.act_nombre || 'Sin título',
-              start: startDateTime,
-              end: endDateTime,
-              location: h.parroquia_nombre || h.par_nombre || 'Sin ubicación',
-              type: h.acto_nombre || h.act_nombre || h.acto_tipo || h.type || 'misa',
-              allDay: false,
-              reservas_count: h.reservas_count || 0,
-              reservas_activas_count: h.reservas_activas_count || 0,
-              raw: h,
-            };
-          } catch (err) {
-            console.error('Error procesando horario (horarios):', h, err);
-            return null;
-          }
-        })
-        .filter(Boolean);
+      // FALLBACK: si horarios está vacío por algún motivo, filtrar items del hook por parroquiaid
+      if (items && items.length > 0) {
+        return items
+          .filter(it => {
+            const pid = extractParroquiaId(it);
+            return pid && String(pid) === String(selectedParroquia);
+          })
+          .map(event => {
+            try {
+              const eventDate = event.date || event.h_fecha;
+              const eventTime = event.time || event.h_hora;
+              if (!eventDate || !eventTime) return null;
+              const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
+              if (isNaN(startDateTime.getTime())) return null;
+              const endDateTime = new Date(startDateTime.getTime() + (60 * 60 * 1000));
+              return {
+                id: event.horarioid ?? event.id,
+                title: event.title || event.acto_titulo || event.acto_nombre || event.act_nombre || 'Sin título',
+                start: startDateTime,
+                end: endDateTime,
+                location: event.location || event.parroquia_nombre || 'Sin ubicación',
+                // Intentar obtener el tipo desde acto/act_nombre antes de usar el tipo genérico
+                type: event.type || event.acto_nombre || event.acto_titulo || event.acto_tipo || 'misa',
+                allDay: false,
+                reservas_count: event.reservas_count || 0,
+                reservas_activas_count: event.reservas_activas_count || 0,
+                raw: event
+              };
+            } catch (err) {
+              console.error('Error procesando item (fallback por parroquia):', event, err);
+              return null;
+            }
+          })
+          .filter(Boolean);
+      }
+
+      // Si no hay nada, retornar arreglo vacío
+      return [];
     }
 
-		// FALLBACK: si horarios está vacío por algún motivo, filtrar items del hook por parroquiaid
-		if (items && items.length > 0) {
-			return items
-				.filter(it => {
-					const pid = extractParroquiaId(it);
-					return pid && String(pid) === String(selectedParroquia);
-				})
-				.map(event => {
-					try {
-						const eventDate = event.date || event.h_fecha;
-						const eventTime = event.time || event.h_hora;
-						if (!eventDate || !eventTime) return null;
-						const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
-						if (isNaN(startDateTime.getTime())) return null;
-						const endDateTime = new Date(startDateTime.getTime() + (60 * 60 * 1000));
-						return {
-							id: event.horarioid ?? event.id,
-							title: event.title || event.acto_titulo || event.acto_nombre || event.act_nombre || 'Sin título',
-							start: startDateTime,
-							end: endDateTime,
-							location: event.location || event.parroquia_nombre || 'Sin ubicación',
-							// Intentar obtener el tipo desde acto/act_nombre antes de usar el tipo genérico
-							type: event.type || event.acto_nombre || event.acto_titulo || event.acto_tipo || 'misa',
-							allDay: false,
-							reservas_count: event.reservas_count || 0,
-							reservas_activas_count: event.reservas_activas_count || 0,
-							raw: event
-						};
-					} catch (err) {
-						console.error('Error procesando item (fallback por parroquia):', event, err);
-						return null;
-					}
-				})
-				.filter(Boolean);
-		}
+    // Comportamiento original: usar items del hook
+    if (!items || items.length === 0) return [];
+    return items
+      .map(event => {
+        try {
+          const eventDate = event.date;
+          const eventTime = event.time;
+          if (!eventDate || !eventTime) return null;
 
-		// Si no hay nada, retornar arreglo vacío
-		return [];
-	}
+          const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
+          if (isNaN(startDateTime.getTime())) return null;
 
-	// Comportamiento original: usar items del hook
-	if (!items || items.length === 0) return [];
-  return items
-    .map(event => {
-      try {
-        const eventDate = event.date;
-        const eventTime = event.time;
-        if (!eventDate || !eventTime) return null;
-
-        const startDateTime = new Date(`${eventDate}T${eventTime}:00`);
-        if (isNaN(startDateTime.getTime())) return null;
-
-        // Usar fin si viene de /calendario; si no, +1 hora
-        const endDateStr = event.date_end || eventDate;
-        const endTimeStr = event.time_end || eventTime;
-        let endDateTime = new Date(`${endDateStr}T${endTimeStr}:00`);
-        if (isNaN(endDateTime.getTime()) || endDateTime < startDateTime) {
-          endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+          // Usar fin si viene de /calendario; si no, +1 hora
+          const endDateStr = event.date_end || eventDate;
+          const endTimeStr = event.time_end || eventTime;
+          let endDateTime = new Date(`${endDateStr}T${endTimeStr}:00`);
+          if (isNaN(endDateTime.getTime()) || endDateTime < startDateTime) {
+            endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+          }
+          return {
+            id: event.horarioid,
+            title: event.title || 'Sin título',
+            start: startDateTime,
+            end: endDateTime,
+            location: event.location || 'Sin ubicación',
+            type: event.type || 'misa',
+            allDay: false,
+            reservas_count: event.reservas_count || 0,
+            reservas_activas_count: event.reservas_activas_count || 0,
+            actoliturgicoid: event.actoliturgicoid,
+            raw: event,
+          };
+        } catch (error) {
+          console.error('Error procesando horario:', event, error);
+          return null;
         }
-        return {
-          id: event.horarioid,
-          title: event.title || 'Sin t��tulo',
-          start: startDateTime,
-          end: endDateTime,
-          location: event.location || 'Sin ubicaci��n',
-          type: event.type || 'misa',
-          allDay: false,
-          reservas_count: event.reservas_count || 0,
-          reservas_activas_count: event.reservas_activas_count || 0,
-          actoliturgicoid: event.actoliturgicoid,
-          raw: event,
-        };
-      } catch (error) {
-        console.error('Error procesando horario:', event, error);
-        return null;
-      }
-    })
-    .filter(Boolean);
-}, [items, horarios, selectedParroquia]);
+      })
+      .filter(Boolean);
+  }, [items, horarios, selectedParroquia]);
 
   // Estilos personalizados para los eventos según su tipo
   const eventStyleGetter = (event) => {
@@ -570,11 +627,10 @@ const Horarios = () => {
               key={viewName}
               type="button"
               onClick={() => toolbar.onView(viewName)}
-              className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
-                toolbar.view === viewName
-                  ? 'bg-[var(--primary)] text-white border-[var(--primary)]'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-[var(--primary)] hover:text-[var(--primary)]'
-              }`}
+              className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${toolbar.view === viewName
+                ? 'bg-[var(--primary)] text-white border-[var(--primary)]'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-[var(--primary)] hover:text-[var(--primary)]'
+                }`}
             >
               {VIEW_LABELS[viewName] || viewName}
             </button>
@@ -601,6 +657,27 @@ const Horarios = () => {
     setReservaModalOpen(true);
   }, [selectedParroquia]);
 
+  const openActoLiturgicoModal = useCallback(({ dateStr, timeStr, parroquiaid, actoNombre, fechaInicio, fechaFin }) => {
+    console.log('[Horarios] openActoLiturgicoModal payload', { dateStr, timeStr, parroquiaid, actoNombre, fechaInicio, fechaFin });
+    if (!dateStr) return;
+    
+    const newData = {
+      acto_nombre: actoNombre || '',
+      act_titulo: '',
+      act_descripcion: '',
+      h_fecha: dateStr,
+      h_hora: timeStr || '',
+      h_fecha_fin: fechaFin || '',
+      h_hora_fin: '',
+      act_estado: true,
+      parroquiaid: parroquiaid || selectedParroquia || ''
+    };
+    
+    setActoLiturgicoData(newData);
+    setActoLiturgicoModalOpen(true);
+  }, [selectedParroquia]);
+    
+
   // Confirmar creación de reserva
   const confirmReservation = useCallback(() => {
     if (pendingReservation) {
@@ -609,6 +686,15 @@ const Horarios = () => {
     setConfirmOpen(false);
     setPendingReservation(null);
   }, [pendingReservation, openReservationModal]);
+
+  //confirmar creacion de acto liturgico
+  const confirmActoLiturgico = useCallback(() => {
+    if (pendingActoLiturgico) {
+      openActoLiturgicoModal(pendingActoLiturgico);
+    }
+    setConfirmOpen(false);
+    setPendingActoLiturgico(null);
+  }, [pendingActoLiturgico, openActoLiturgicoModal]);
 
   // REEMPLAZA handleSelectSlot por esta versión mejorada
   const handleSelectSlot = useCallback(({ start, end }) => {
@@ -648,6 +734,8 @@ const Horarios = () => {
         });
         return;
       }
+
+      
 
       const sameDayEvents = events
         .filter(evt => {
@@ -928,11 +1016,10 @@ const Horarios = () => {
           <div>
             <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>
             <div className="flex items-center gap-3">
-              <span className={`inline-block px-3 py-2 text-sm font-medium rounded-lg ${
-                estadoValue === 'pendiente' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
+              <span className={`inline-block px-3 py-2 text-sm font-medium rounded-lg ${estadoValue === 'pendiente' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' :
                 estadoValue === 'pagado' ? 'bg-green-100 text-green-700 border border-green-200' :
-                'bg-gray-100 text-gray-700 border border-gray-200'
-              }`}>
+                  'bg-gray-100 text-gray-700 border border-gray-200'
+                }`}>
                 {estadoValue.charAt(0).toUpperCase() + estadoValue.slice(1)}
               </span>
               {estadoValue !== 'pagado' && (
@@ -1207,14 +1294,14 @@ const Horarios = () => {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Calendario Litúrgico"
+          title="Selecciona tus Horarios"
           subtitle="Visualiza y gestiona los horarios de actos litúrgicos"
           icon={Clock}
         />
         <Card className="p-8">
           <div className="flex items-center justify-center min-h-[500px]">
             <div className="text-center">
-              <div 
+              <div
                 className="animate-spin rounded-full h-16 w-16 border-b-4 mx-auto mb-4"
                 style={{ borderBottomColor: 'var(--primary)' }}
               ></div>
@@ -1232,7 +1319,7 @@ const Horarios = () => {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Calendario Litúrgico"
+          title="Selecciona tus Horarios"
           subtitle="Visualiza y gestiona los horarios de actos litúrgicos"
           icon={Clock}
         />
@@ -1245,8 +1332,8 @@ const Horarios = () => {
               <motion.button
                 onClick={refetch}
                 className="text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 mx-auto transition-all hover:brightness-110 shadow-md"
-                style={{ 
-                  background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' 
+                style={{
+                  background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)'
                 }}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -1265,16 +1352,53 @@ const Horarios = () => {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Calendario Litúrgico"
+        title="Selecciona tus Horarios"
         subtitle={`Visualiza y gestiona los horarios de actos litúrgicos (${events.length} horario${events.length !== 1 ? 's' : ''})`}
         icon={Clock}
       >
+        {actoLiturgicoModalOpen && (
+          <ActoLiturgicoModal
+            isOpen={actoLiturgicoModalOpen}
+            onClose={() => setActoLiturgicoModalOpen(false)}
+            initialValues={actoLiturgicoData}
+            onCreated={() => {
+              // Refresh events when a new liturgical act is created
+              if (typeof refetchEvents === 'function') {
+                refetchEvents();
+              }
+              setActoLiturgicoModalOpen(false);
+            }}
+          />
+        )}
         <motion.button
-          onClick={() => navigate('/liturgico/reservas?from=calendar')}
+          onClick={() => openActoLiturgicoModal({
+            dateStr: format(new Date(), 'yyyy-MM-dd'),
+            timeStr: '',
+            parroquiaid: selectedParroquia || '',
+            actoNombre: '',
+            actoTitulo: ''
+          })}
           className="text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110 shadow-lg"
-          style={{ 
-            background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' 
-          }}
+          style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' }}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+        >
+          <Plus className="w-4 h-4" />
+          Agregar Acto Litúrgico
+        </motion.button>
+
+        <motion.button
+          onClick={() => openReservationModal({
+            dateStr: format(new Date(), 'yyyy-MM-dd'),
+            timeStr: '',
+            horarioid: '',
+            parroquiaid: selectedParroquia || '',
+            actoNombre: '',
+            actoTitulo: ''
+          })}
+
+          className="text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110 shadow-lg"
+          style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' }}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
         >
@@ -1283,7 +1407,8 @@ const Horarios = () => {
         </motion.button>
       </PageHeader>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+      {/* Mapa de parroquias */}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.6fr)_minmax(0,1.0fr)]">
         <Card className="p-0 overflow-hidden">
           <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
             <div>
@@ -1294,7 +1419,7 @@ const Horarios = () => {
               {Object.keys(parroquiasCoords).length || 0} parroquia(s)
             </span>
           </div>
-          <div className="h-[640px] w-full">
+          <div className="h-[500px] w-full">
             {Object.keys(parroquiasCoords).length ? (
               <MapContainer
                 key={mapKey}
@@ -1304,28 +1429,33 @@ const Horarios = () => {
                 scrollWheelZoom
               >
                 <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                {Object.entries(parroquiasCoords).map(([id, val]) => (
-                  <Marker
-                    key={id}
-                    position={[val.coords.lat, val.coords.lng]}
-                    icon={createCustomIcon((val.parroquia.par_nombre || '⛪').charAt(0).toUpperCase() || '⛪')}
-                    eventHandlers={{
-                      click: () => {
-                        const label = `${val.parroquia.par_nombre} - ${val.parroquia.par_direccion} (${val.parroquia.dis_nombre})`;
-                        setParroquiaInput(label);
-                        handleParroquiaFilter(String(id));
-                      }
-                    }}
-                  >
-                    <Popup>
-                      <div className="text-sm">
-                        <div className="font-semibold">{val.parroquia.par_nombre}</div>
-                        <div className="text-gray-600">{val.parroquia.par_direccion}</div>
-                        <div className="text-gray-500 text-xs">{val.parroquia.dis_nombre}</div>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
+                {Object.entries(parroquiasCoords).map(([id, val]) => {
+                  if (!val?.coords || Number.isNaN(val.coords.lat) || Number.isNaN(val.coords.lng)) {
+                    return null;
+                  }
+                  return (
+                    <Marker
+                      key={id}
+                      position={[val.coords.lat, val.coords.lng]}
+                      icon={createCustomIcon((val.parroquia.par_nombre || '⛪').charAt(0).toUpperCase() || '⛪')}
+                      eventHandlers={{
+                        click: () => {
+                          const label = `${val.parroquia.par_nombre} - ${val.parroquia.par_direccion} (${val.parroquia.dis_nombre})`;
+                          setParroquiaInput(label);
+                          handleParroquiaFilter(String(id));
+                        }
+                      }}
+                    >
+                      <Popup>
+                        <div className="text-sm">
+                          <div className="font-semibold">{val.parroquia.par_nombre}</div>
+                          <div className="text-gray-600">{val.parroquia.par_direccion}</div>
+                          <div className="text-gray-500 text-xs">{val.parroquia.dis_nombre}</div>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
               </MapContainer>
             ) : (
               <div className="flex items-center justify-center h-full">
@@ -1347,10 +1477,10 @@ const Horarios = () => {
             />
           </Card>
 
-          
 
-          <Card className="p-5 overflow-hidden">
-            <div className="h-[520px] w-full overflow-hidden">
+          {/* Calendario */}
+          <Card className="p-5">
+            <div className="min-h-[400px] w-full">
               {events.length === 0 ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center max-w-md">
@@ -1373,11 +1503,12 @@ const Horarios = () => {
                 </div>
               ) : (
                 <BigCalendar
+                  className="horarios-calendar"
                   localizer={localizer}
                   events={events}
                   startAccessor="start"
                   endAccessor="end"
-                  style={{ height: '50%' }}
+                  style={{ height: '100%' }}
                   view={view}
                   onView={setView}
                   date={date}
@@ -1406,15 +1537,15 @@ const Horarios = () => {
       </div>
 
       <Card className="p-4">
-            <div className="flex flex-wrap gap-4 items-center">
-              <span className="text-sm font-medium text-gray-700">Tipos de actos:</span>
-              {Object.entries(LITURGICAL_TYPES).map(([key, value]) => (
-                <div key={key} className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded" style={{ backgroundColor: value.color }} />
-                  <span className="text-sm text-gray-600">{value.label}</span>
-                </div>
-              ))}
+        <div className="flex flex-wrap gap-4 items-center">
+          <span className="text-sm font-medium text-gray-700">Tipos de actos:</span>
+          {Object.entries(LITURGICAL_TYPES).map(([key, value]) => (
+            <div key={key} className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded" style={{ backgroundColor: value.color }} />
+              <span className="text-sm text-gray-600">{value.label}</span>
             </div>
+          ))}
+        </div>
       </Card>
 
       <Card className="p-4">
@@ -1466,11 +1597,21 @@ const Horarios = () => {
       <DialogoConfirmacion
         abierto={noSchedulesOpen}
         titulo="Sin Horarios Programados"
-        mensaje="No hay horarios programados para esta fecha. Elija otra fecha."
-        onConfirmar={() => setNoSchedulesOpen(false)}
+        mensaje="No hay horarios programados para esta fecha. ¿Desea crear un nuevo acto litúrgico?"
+        onConfirmar={() => {
+          setNoSchedulesOpen(false);
+          openActoLiturgicoModal({
+            dateStr: format(new Date(), 'yyyy-MM-dd'),
+            timeStr: '',
+            parroquiaid: selectedParroquia || '',
+            actoNombre: '',
+            actoTitulo: ''
+          });
+        }}
         onCancelar={() => setNoSchedulesOpen(false)}
-        confirmText="Entendido"
+        confirmText="Crear Acto Litúrgico"
         cancelText="Cerrar"
+        //cancelText="Cerrar"
         isDanger={false}
       />
     </div>

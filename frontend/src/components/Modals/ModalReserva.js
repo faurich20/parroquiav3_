@@ -8,6 +8,9 @@ import { format } from 'date-fns';
 import EditableCombobox from '../Form/EditableCombobox';
 import 'leaflet/dist/leaflet.css';
 
+// Coordenadas por defecto (Lambayeque, Perú)
+const DEFAULT_CENTER = [-6.7437, -79.8715];
+
 // Configurar iconos de Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -16,20 +19,8 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-const getFallbackCoords = (distrito) => {
-  const fallbacks = {
-    'LAMBAYEQUE': { lat: -6.7063, lng: -79.9066 },
-    'CHICLAYO': { lat: -6.7651, lng: -79.8542 },
-    'JOSE LEONARDO ORTIZ': { lat: -6.7596, lng: -79.8538 },
-    'default': { lat: -6.7714, lng: -79.8409 }
-  };
-  return fallbacks[distrito] || fallbacks.default;
-};
-
-const DEFAULT_CENTER = [-6.7437, -79.8715];
-
 const geocodeParroquia = async (parroquia) => {
-  if (!parroquia) return getFallbackCoords('default');
+  if (!parroquia) return null;
 
   const latFromDb = parseFloat(parroquia.par_latitud);
   const lngFromDb = parseFloat(parroquia.par_longitud);
@@ -52,7 +43,7 @@ const geocodeParroquia = async (parroquia) => {
   } catch (e) {
     // ignore
   }
-  return getFallbackCoords(parroquia.dis_nombre);
+  return null;
 };
 
 const createCustomIcon = (label) => L.divIcon({

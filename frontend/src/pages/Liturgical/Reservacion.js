@@ -27,7 +27,7 @@ L.Icon.Default.mergeOptions({
 
 // Función de geocoding con preferencia por coordenadas guardadas y cache local
 const geocodeParroquia = async (parroquia) => {
-  if (!parroquia) return getFallbackCoords('default');
+  if (!parroquia) return null;
 
   const latFromDb = parseFloat(parroquia.par_latitud);
   const lngFromDb = parseFloat(parroquia.par_longitud);
@@ -73,21 +73,7 @@ const geocodeParroquia = async (parroquia) => {
     console.error('Error en geocoding para', parroquia.par_nombre, ':', error);
   }
 
-  // Fallback a coordenadas hardcodeadas por distrito
-  return getFallbackCoords(parroquia.dis_nombre);
-};
-
-// Coordenadas de fallback por distrito
-const getFallbackCoords = (distrito) => {
-  const fallbacks = {
-    'LAMBAYEQUE': { lat: -6.7063, lng: -79.9066 },
-    'CHICLAYO': { lat: -6.7651, lng: -79.8542 },
-    'JOSE LEONARDO ORTIZ': { lat: -6.7596, lng: -79.8538 },
-    // Coordenadas por defecto para distritos desconocidos
-    'default': { lat: -6.7714, lng: -79.8409 }
-  };
-
-  return fallbacks[distrito] || fallbacks.default;
+  return null;
 };
 
 // Iconos personalizados para cada parroquia

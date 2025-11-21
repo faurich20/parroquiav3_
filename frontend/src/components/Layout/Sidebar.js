@@ -34,7 +34,7 @@ const Sidebar = ({ collapsed, toggleCollapse }) => {
         permission: 'liturgico',
         children: [
           {
-            title: 'Gestionar Actos',
+            title: 'Actos Litúrgicos',
             path: '/liturgico/gestionar',
             icon: Church,
             permission: 'liturgico_actos',
@@ -218,7 +218,7 @@ const Sidebar = ({ collapsed, toggleCollapse }) => {
         {!collapsed && (
           <div>
             <h1 className="text-lg font-bold" style={{ color: 'var(--text)' }}>
-              CHASKIS.DEV
+              CHASKIS
             </h1>
             <p className="text-xs" style={{ color: 'var(--muted)' }}>
               Sistema de Parroquia
