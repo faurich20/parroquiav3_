@@ -131,6 +131,20 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
     return () => { mounted = false; };
   }, [isOpen, authFetch]);
 
+  // Sync pago_data and pago_estado when they change in initialValues
+  useEffect(() => {
+    if (isOpen && initialValues) {
+      if (initialValues.pago_data) {
+        console.log('🔄 [ModalReserva] Syncing pago_data from initialValues:', initialValues.pago_data);
+        setData(prev => ({
+          ...prev,
+          pago_data: initialValues.pago_data,
+          pago_estado: initialValues.pago_estado || 'pagado'
+        }));
+      }
+    }
+  }, [isOpen, initialValues?.pago_data, initialValues?.pago_estado]);
+
   // Initialize parroquiaInput when modal opens or parroquias load
   useEffect(() => {
     if (isOpen && parroquias.length > 0 && (data.parroquiaid || initialValues?.parroquiaid)) {

@@ -54,25 +54,38 @@ export default function useCrud(baseUrl, options = {}) {
 
   const updateItem = useCallback(async (id, payload) => {
     try {
+      console.log(' [useCrud] updateItem llamado con:', { id, payload });
       const resp = await authFetch(`${baseUrl}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      
       if (!resp.ok) {
         const e = await resp.json().catch(() => ({}));
         throw new Error(e.error || 'Error al actualizar');
       }
+      
       const data = await resp.json();
-      const item = data.item || data.role || data.user || data.data;
-      if (item) {
-        setItems(prev => prev.map(i => {
-          const itemId = i.id || i.reservaid || i.parroquiaid || i.horarioid;
-          return itemId === id ? item : i;
-        }));
+      console.log(' [useCrud] Respuesta de actualización:', data);
+      
+      const updatedItem = data.item || data.role || data.user || data.data;
+      
+      if (updatedItem) {
+        setItems(prev => {
+          const updatedItems = prev.map(i => {
+            const itemId = i.id || i.reservaid || i.parroquiaid || i.horarioid;
+            // Convertir ambos IDs a string para comparación consistente
+            return String(itemId) === String(id) ? { ...i, ...updatedItem } : i;
+          });
+          console.log(' [useCrud] Estado actualizado:', updatedItems);
+          return updatedItems;
+        });
       }
+      
       return { success: true, data };
     } catch (e) {
+      console.error(' [useCrud] Error en updateItem:', e);
       return { success: false, error: e.message };
     }
   }, [authFetch, baseUrl]);

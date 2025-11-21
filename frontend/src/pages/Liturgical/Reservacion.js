@@ -1070,6 +1070,20 @@ const Reservacion = () => {
         disabled: modalMode === 'view',
         rows: 3
       },
+      { // Campo de estado de pago editable (para edición y vista)
+        name: 'pago_estado',
+        label: 'Estado',
+        type: 'combobox',
+        options: [
+          { value: 'pendiente', label: 'Pendiente' },
+          { value: 'pagado', label: 'Pagado' },
+          { value: 'vencido', label: 'Vencido' },
+          { value: 'fallido', label: 'Fallido' }
+        ],
+        placeholder: 'Seleccione estado',
+        getInitialValue: () => getInitialValue('pago_estado', 'pendiente'),
+        disabled: modalMode === 'view'
+      },
       {
         name: 'estado_label',
         label: 'Estado',
