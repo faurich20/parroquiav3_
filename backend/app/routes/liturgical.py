@@ -740,7 +740,24 @@ def create_horario():
 def list_reservas():
     """Lista todas las reservas de actos litúrgicos"""
     try:
-        items = db.session.execute(text("""
+        # Obtener parámetros de filtro
+        personaid = request.args.get('personaid', type=int)
+        parroquiaid = request.args.get('parroquiaid', type=int)
+
+        params = {}
+        where_clauses = []
+
+        if personaid:
+            where_clauses.append("r.personaid = :personaid")
+            params['personaid'] = personaid
+        
+        if parroquiaid:
+            where_clauses.append("a.parroquiaid = :parroquiaid")
+            params['parroquiaid'] = parroquiaid
+
+        where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+        query = text(f"""
             SELECT
                 r.reservaid,
                 r.horarioid,
@@ -771,8 +788,11 @@ def list_reservas():
             LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
             LEFT JOIN public.persona per ON r.personaid = per.personaid
             LEFT JOIN public.pago pg ON r.pagoid = pg.pagoid
+            {where_sql}
             ORDER BY r.created_at DESC
-        """)).fetchall()
+        """)
+
+        items = db.session.execute(query, params).fetchall()
 
         result = []
         for row in items:

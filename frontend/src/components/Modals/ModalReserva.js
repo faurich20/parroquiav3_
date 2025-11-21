@@ -62,9 +62,9 @@ const createCustomIcon = (label) => L.divIcon({
     border: 3px solid white;
     box-shadow: 0 2px 6px rgba(0,0,0,0.3);
   ">${label}</div>`,
-  iconSize: [35,35],
-  iconAnchor: [17.5,35],
-  popupAnchor: [0,-35]
+  iconSize: [35, 35],
+  iconAnchor: [17.5, 35],
+  popupAnchor: [0, -35]
 });
 
 const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch }) => {
@@ -76,7 +76,7 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
   const [mapKey, setMapKey] = useState(0);
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [payment, setPayment] = useState({ pago_medio:'', pago_monto:'', cardNumber:'', expiryDate:'', cvv:'', cardHolder:'' });
+  const [payment, setPayment] = useState({ pago_medio: '', pago_monto: '', cardNumber: '', expiryDate: '', cvv: '', cardHolder: '' });
 
   // editable input text for parroquia
   const [parroquiaInput, setParroquiaInput] = useState('');
@@ -94,7 +94,7 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
         pago_data: initialValues?.pago_data || undefined
       });
       setPaymentOpen(false);
-      setPayment({ pago_medio:'', pago_monto:'', cardNumber:'', expiryDate:'', cvv:'', cardHolder:'' });
+      setPayment({ pago_medio: '', pago_monto: '', cardNumber: '', expiryDate: '', cvv: '', cardHolder: '' });
       // set visible label if parroquiaid provided
       if (initialValues?.parroquiaid) {
         // we'll set label after parroquias load (useEffect below)
@@ -120,8 +120,8 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
         }
         const r2 = await authFetch('http://localhost:5000/api/personas');
         if (r2?.ok) {
-          const j2 = await r2.json();
-          if (mounted) setPersonas(j2.personas || []);
+          const j = await r2.json();
+          if (mounted) setPersonas(j.personas || []);
         }
       } catch (e) {
         console.error('ModalReserva load error', e);
@@ -131,14 +131,18 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
     return () => { mounted = false; };
   }, [isOpen, authFetch]);
 
-  // sync parroquiaInput label when parroquias list or initial parroquiaid changes
+  // Initialize parroquiaInput when modal opens or parroquias load
   useEffect(() => {
-    if (!parroquias.length) return;
-    const match = parroquias.find(p => String(p.parroquiaid) === String(data.parroquiaid || initialValues?.parroquiaid));
-    if (match) {
-      setParroquiaInput(`${match.par_nombre} - ${match.par_direccion} (${match.dis_nombre})`);
+    if (isOpen && parroquias.length > 0 && (data.parroquiaid || initialValues?.parroquiaid)) {
+      const targetId = data.parroquiaid || initialValues.parroquiaid;
+      const match = parroquias.find(p => String(p.parroquiaid) === String(targetId));
+      if (match) {
+        // Only set if different to avoid loop
+        const label = `${match.par_nombre} - ${match.par_direccion} (${match.dis_nombre})`;
+        setParroquiaInput(prev => prev === label ? prev : label);
+      }
     }
-  }, [parroquias, data.parroquiaid, initialValues?.parroquiaid]);
+  }, [isOpen, parroquias, initialValues?.parroquiaid, data.parroquiaid]);
 
   // geocode parroquias
   useEffect(() => {
@@ -230,7 +234,7 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
 
   const handleCreate = async () => {
     const err = validate(data);
-    if (err) { alert(err); return { success:false, error: err }; }
+    if (err) { alert(err); return { success: false, error: err }; }
     try {
       const payload = {
         horarioid: parseInt(data.horarioid),
@@ -251,13 +255,13 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
       return { success: true, payload };
     } catch (e) {
       console.error('ModalReserva submit error', e);
-      return { success:false, error: e.message || String(e) };
+      return { success: false, error: e.message || String(e) };
     }
   };
 
   const renderPayment = () => {
     if (!paymentOpen) return null;
-    const methods = [{ value:'Efectivo', label:'💵 Efectivo' }, { value:'Yape o Plin', label:'📱 Yape o Plin' }, { value:'Tarjeta', label:'💳 Tarjeta' }];
+    const methods = [{ value: 'Efectivo', label: '💵 Efectivo' }, { value: 'Yape o Plin', label: '📱 Yape o Plin' }, { value: 'Tarjeta', label: '💳 Tarjeta' }];
     return (
       <ModalBase isOpen={paymentOpen} title="💳 Realizar Pago" icon={Calendar} onClose={() => setPaymentOpen(false)} size="lg">
         <div className="space-y-6 p-6">
@@ -271,7 +275,7 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">💰 Método de Pago</label>
-            <select value={payment.pago_medio} onChange={(e)=>setPayment(prev=>({...prev,pago_medio:e.target.value}))} className="w-full px-3 py-2 border rounded-lg">
+            <select value={payment.pago_medio} onChange={(e) => setPayment(prev => ({ ...prev, pago_medio: e.target.value }))} className="w-full px-3 py-2 border rounded-lg">
               <option value=''>Seleccione método</option>
               {methods.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
@@ -281,27 +285,27 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
             <label className="block text-sm font-medium text-gray-700 mb-2">💲 Monto</label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">S/</span>
-              <input type="number" value={payment.pago_monto} onChange={(e)=>setPayment(prev=>({...prev,pago_monto:e.target.value}))} className="w-full pl-12 pr-4 py-2 border rounded-lg" />
+              <input type="number" value={payment.pago_monto} onChange={(e) => setPayment(prev => ({ ...prev, pago_monto: e.target.value }))} className="w-full pl-12 pr-4 py-2 border rounded-lg" />
             </div>
           </div>
 
           {payment.pago_medio === 'Tarjeta' && (
             <div className="space-y-4">
-              <input value={payment.cardNumber} onChange={(e)=>setPayment(prev=>({...prev,cardNumber:e.target.value}))} placeholder="Número de tarjeta" className="w-full px-3 py-2 border rounded-lg" />
+              <input value={payment.cardNumber} onChange={(e) => setPayment(prev => ({ ...prev, cardNumber: e.target.value }))} placeholder="Número de tarjeta" className="w-full px-3 py-2 border rounded-lg" />
               <div className="grid grid-cols-3 gap-3">
-                <input value={payment.expiryDate} onChange={(e)=>setPayment(prev=>({...prev,expiryDate:e.target.value}))} placeholder="MM/YY" className="px-3 py-2 border rounded-lg" />
-                <input value={payment.cvv} onChange={(e)=>setPayment(prev=>({...prev,cvv:e.target.value}))} placeholder="CVV" className="px-3 py-2 border rounded-lg" />
-                <input value={payment.cardHolder} onChange={(e)=>setPayment(prev=>({...prev,cardHolder:e.target.value}))} placeholder="Nombre en tarjeta" className="px-3 py-2 border rounded-lg" />
+                <input value={payment.expiryDate} onChange={(e) => setPayment(prev => ({ ...prev, expiryDate: e.target.value }))} placeholder="MM/YY" className="px-3 py-2 border rounded-lg" />
+                <input value={payment.cvv} onChange={(e) => setPayment(prev => ({ ...prev, cvv: e.target.value }))} placeholder="CVV" className="px-3 py-2 border rounded-lg" />
+                <input value={payment.cardHolder} onChange={(e) => setPayment(prev => ({ ...prev, cardHolder: e.target.value }))} placeholder="Nombre en tarjeta" className="px-3 py-2 border rounded-lg" />
               </div>
             </div>
           )}
 
           <div className="flex gap-3 pt-4">
-            <button onClick={()=>setPaymentOpen(false)} className="flex-1 px-4 py-2 border rounded-lg">Cancelar</button>
-            <button onClick={()=>{
-              if(!payment.pago_medio){ alert('Seleccione método'); return; }
-              if(!payment.pago_monto || parseFloat(payment.pago_monto)<=0){ alert('Ingrese monto'); return; }
-              setData(prev => ({ ...prev, pago_estado: 'pagado', pago_data: { pago_medio: payment.pago_medio, pago_monto: parseFloat(payment.pago_monto), pago_descripcion: `Pago por reserva - ${prev?.persona_nombre||'N/A'}`, pago_fecha: new Date().toISOString(), pago_estado: 'pagado' } }));
+            <button onClick={() => setPaymentOpen(false)} className="flex-1 px-4 py-2 border rounded-lg">Cancelar</button>
+            <button onClick={() => {
+              if (!payment.pago_medio) { alert('Seleccione método'); return; }
+              if (!payment.pago_monto || parseFloat(payment.pago_monto) <= 0) { alert('Ingrese monto'); return; }
+              setData(prev => ({ ...prev, pago_estado: 'pagado', pago_data: { pago_medio: payment.pago_medio, pago_monto: parseFloat(payment.pago_monto), pago_descripcion: `Pago por reserva - ${prev?.persona_nombre || 'N/A'}`, pago_fecha: new Date().toISOString(), pago_estado: 'pagado' } }));
               setPaymentOpen(false);
             }} className="px-4 py-2 text-white rounded-lg" style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}>✅ Pagar Ahora</button>
           </div>
@@ -312,8 +316,9 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
 
   // fields definition (modal form)
   const fields = [
-    { name:'h_fecha', label:'Fecha', type:'date', min: today, disabled: !!data.h_fecha },
-    { name:'parroquiaid', label:'Parroquia', type:'custom',
+    { name: 'h_fecha', label: 'Fecha', type: 'date', min: today, disabled: !!data.h_fecha },
+    {
+      name: 'parroquiaid', label: 'Parroquia', type: 'custom',
       render: () => (
         <div>
           <label className="block text-sm font-medium text-gray-500 mb-1">Parroquia</label>
@@ -322,38 +327,40 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
         </div>
       )
     },
-    { name:'horarioid', label:'Horario', type:'custom',
+    {
+      name: 'horarioid', label: 'Horario', type: 'custom',
       render: (value, setValue, allValues) => {
         const pid = data.parroquiaid;
         const fecha = data.h_fecha;
-        let opts = [{ value:'', label:'Seleccione un horario' }];
+        let opts = [{ value: '', label: 'Seleccione un horario' }];
         if (pid && fecha) {
           const f = horarios.filter(h => String(h.parroquiaid) === String(pid) && h.h_fecha === fecha)
             .map(h => ({ value: h.horarioid, label: `${h.h_hora || ''} - ${h.acto_titulo || h.acto_nombre || 'Sin título'}` }));
-          opts = [{ value:'', label:'Seleccione un horario' }, ...f];
+          opts = [{ value: '', label: 'Seleccione un horario' }, ...f];
         }
         return (
           <div>
             <label className="block text-sm font-medium text-gray-500 mb-1">Horario</label>
-            <select value={value||''} onChange={(e)=>{ setValue(e.target.value); setData(prev=>({...prev, horarioid: e.target.value})); }} disabled={!pid || !fecha} className="w-full px-3 py-2 border rounded-lg">
+            <select value={value || ''} onChange={(e) => { setValue(e.target.value); setData(prev => ({ ...prev, horarioid: e.target.value })); }} disabled={!pid || !fecha} className="w-full px-3 py-2 border rounded-lg">
               {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
         );
       }
     },
-    { name:'persona_nombre', label:'Persona', type:'combobox', options: peopleOptions, placeholder: 'Seleccione o escriba el nombre' },
-    { name:'res_descripcion', label:'Descripción', type:'textarea', placeholder:'Descripción de la reserva' },
-    { name:'estado_label', label:'Estado', type:'custom',
+    { name: 'persona_nombre', label: 'Persona', type: 'combobox', options: peopleOptions, placeholder: 'Seleccione o escriba el nombre' },
+    { name: 'res_descripcion', label: 'Descripción', type: 'textarea', placeholder: 'Descripción de la reserva' },
+    {
+      name: 'estado_label', label: 'Estado', type: 'custom',
       render: () => {
         const estado = data.pago_estado || 'pendiente';
         return (
           <div>
             <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>
             <div className="flex items-center gap-3">
-              <span className={`inline-block px-3 py-2 text-sm font-medium rounded-lg ${estado==='pendiente'?'bg-yellow-100 text-yellow-700':'bg-green-100 text-green-700'}`}>{estado.charAt(0).toUpperCase()+estado.slice(1)}</span>
+              <span className={`inline-block px-3 py-2 text-sm font-medium rounded-lg ${estado === 'pendiente' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>{estado.charAt(0).toUpperCase() + estado.slice(1)}</span>
               {estado !== 'pagado' && (
-                <button onClick={()=> setPaymentOpen(true)} className="px-3 py-2 text-white rounded-lg" style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}>
+                <button onClick={() => setPaymentOpen(true)} className="px-3 py-2 text-white rounded-lg" style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}>
                   💳 Realizar Pago
                 </button>
               )}
@@ -372,7 +379,7 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
           <div className="flex items-center gap-2 text-lg font-semibold text-gray-700"><span className="text-2xl">🗺️</span> Ubicación de Parroquias</div>
           <div className="rounded-lg overflow-hidden border border-gray-200">
             <div style={{ height: 600 }} className="w-full">
-              <MapContainer key={mapKey} center={mapCenter} zoom={10} style={{ height:'100%', width:'100%' }} scrollWheelZoom>
+              <MapContainer key={mapKey} center={mapCenter} zoom={10} style={{ height: '100%', width: '100%' }} scrollWheelZoom>
                 <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 {Object.entries(coordsMap).map(([id, val]) => (
                   <Marker
@@ -406,24 +413,24 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
           <div className="space-y-4">
             {fields.map(f => {
               // render custom types via f.render()
-              if (f.type === 'custom') return <div key={f.name}>{f.render(data[f.name], (v)=>setField(f.name, v), data)}</div>;
+              if (f.type === 'custom') return <div key={f.name}>{f.render(data[f.name], (v) => setField(f.name, v), data)}</div>;
               if (f.type === 'date') return (
                 <div key={f.name}>
                   <label className="block text-sm font-medium text-gray-500 mb-1">{f.label}</label>
-                  <input type="date" value={data[f.name]||''} onChange={(e)=>{ setField(f.name, e.target.value); setField('horarioid',''); }} min={f.min} className="w-full px-3 py-2 border rounded-lg" />
+                  <input type="date" value={data[f.name] || ''} onChange={(e) => { setField(f.name, e.target.value); setField('horarioid', ''); }} min={f.min} className="w-full px-3 py-2 border rounded-lg" />
                 </div>
               );
               if (f.type === 'combobox') return (
                 <div key={f.name}>
                   <label className="block text-sm font-medium text-gray-500 mb-1">{f.label}</label>
-                  <input list={`${f.name}-list`} value={data[f.name]||''} onChange={(e)=>setField(f.name, e.target.value)} className="w-full px-3 py-2 border rounded-lg" />
-                  <datalist id={`${f.name}-list`}>{(f.options||[]).map(opt=> <option key={opt.value} value={opt.label} />)}</datalist>
+                  <input list={`${f.name}-list`} value={data[f.name] || ''} onChange={(e) => setField(f.name, e.target.value)} className="w-full px-3 py-2 border rounded-lg" />
+                  <datalist id={`${f.name}-list`}>{(f.options || []).map(opt => <option key={opt.value} value={opt.label} />)}</datalist>
                 </div>
               );
               if (f.type === 'textarea') return (
                 <div key={f.name}>
                   <label className="block text-sm font-medium text-gray-500 mb-1">{f.label}</label>
-                  <textarea value={data[f.name]||''} onChange={(e)=>setField(f.name, e.target.value)} rows={3} className="w-full px-3 py-2 border rounded-lg" />
+                  <textarea value={data[f.name] || ''} onChange={(e) => setField(f.name, e.target.value)} rows={3} className="w-full px-3 py-2 border rounded-lg" />
                 </div>
               );
               return null;

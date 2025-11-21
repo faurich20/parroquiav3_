@@ -25,7 +25,7 @@ import ParroquiasPage from './pages/Security/Parroquias';
 import ActoLiturgico from './pages/Liturgical/ActoLiturgico';
 import Horarios from './pages/Liturgical/Horarios';
 import Reservacion from './pages/Liturgical/Reservacion';
-import LiturgicalReports from './pages/Liturgical/LiturgicalReports';
+import ReporteReserva from './pages/Liturgical/ReporteReserva';
 
 // Reports Pages
 import ManagementReports from './pages/Reports/ManagementReports';
@@ -208,7 +208,7 @@ const App = () => {
               path="/liturgico/reportes"
               element={
                 <RequirePermission perm={['liturgico', 'liturgico_reportes']}>
-                  <LiturgicalReports />
+                  <ReporteReserva />
                 </RequirePermission>
               }
             />

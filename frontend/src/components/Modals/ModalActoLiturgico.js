@@ -66,6 +66,10 @@ const ModalActoLiturgico = ({
 }) => {
   const { authFetch, user } = useAuth();
 
+  const normalizedRole = (user?.role || '').toString().toLowerCase();
+  const isAdmin = normalizedRole === 'administrador' || normalizedRole === 'admin';
+  const userParroquiaId = user?.persona?.parroquiaid || null;
+
   const [parroquiaOptions, setParroquiaOptions] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -90,10 +94,16 @@ const ModalActoLiturgico = ({
         if (resp?.ok) {
           const data = await resp.json();
           if (!mounted) return;
-          const opts = (data.parroquias || []).map((p) => ({
+          let opts = (data.parroquias || []).map((p) => ({
             value: p.parroquiaid,
             label: p.par_nombre,
           }));
+
+          if (!isAdmin && userParroquiaId) {
+            const ownOpt = opts.find(o => o.value === userParroquiaId);
+            opts = ownOpt ? [ownOpt] : [];
+          }
+
           setParroquiaOptions(opts);
         }
       } catch {
@@ -103,7 +113,7 @@ const ModalActoLiturgico = ({
     return () => {
       mounted = false;
     };
-  }, [authFetch]);
+  }, [authFetch, isAdmin, userParroquiaId]);
 
   // Pre-llenar valores cuando abra el modal
   useEffect(() => {
@@ -121,11 +131,12 @@ const ModalActoLiturgico = ({
     setError('');
     setValues((prev) => ({
       ...prev,
-      parroquiaid:
-        initialValues.parroquiaid ??
-        initialValues.parroquia_id ??
-        prev.parroquiaid ??
-        '',
+      parroquiaid: (!isAdmin && userParroquiaId)
+        ? userParroquiaId
+        : (initialValues.parroquiaid ??
+          initialValues.parroquia_id ??
+          prev.parroquiaid ??
+          ''),
       act_nombre: initialValues.act_nombre ?? prev.act_nombre ?? '',
       act_titulo: (initialValues.act_titulo ?? prev.act_titulo) ?? '',
       act_descripcion:
@@ -135,13 +146,13 @@ const ModalActoLiturgico = ({
       h_fecha_fin: (initialValues.h_fecha_fin ?? prev.h_fecha_fin) || todayStr,
       h_hora: (initialValues.h_hora ?? prev.h_hora) || timeStr,
       h_hora_fin: (initialValues.h_hora_fin ?? prev.h_hora_fin) || '',
-        
+
       act_estado:
         typeof initialValues.act_estado === 'boolean'
           ? initialValues.act_estado
           : true,
     }));
-  }, [isOpen, initialValues]);
+  }, [isOpen, initialValues, isAdmin, userParroquiaId]);
 
   const handleChange = (name, value) => {
     setValues((prev) => ({
@@ -191,7 +202,7 @@ const ModalActoLiturgico = ({
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
           errorData.error ||
-            `Error ${response.status}: ${response.statusText}`
+          `Error ${response.status}: ${response.statusText}`
         );
       }
 
@@ -242,7 +253,8 @@ const ModalActoLiturgico = ({
             <select
               value={values.parroquiaid || ''}
               onChange={(e) => handleChange('parroquiaid', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              disabled={!isAdmin && !!userParroquiaId}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 disabled:bg-gray-100"
             >
               <option value="">Seleccione</option>
               {parroquiaOptions.map((opt) => (

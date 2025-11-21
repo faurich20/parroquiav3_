@@ -101,8 +101,42 @@ const createCustomIcon = (label) => {
 };
 
 const Reservacion = () => {
-  const { items, loading, error, createItem, updateItem, removeItem } = useLiturgicalReservations({ autoList: true });
-  const { authFetch, hasPermission } = useAuth();
+  const { authFetch, hasPermission, user } = useAuth();
+
+  // Lógica de filtros según rol
+  const filters = useMemo(() => {
+    if (!user) return {};
+
+    const roleName = user.role?.rol_nombre;
+    const personaId = user.persona?.personaid;
+    const parroquiaId = user.persona?.parroquiaid;
+
+    // 1. Usuario normal: solo ve sus reservas
+    if (roleName === 'Usuario') {
+      return { personaid: personaId };
+    }
+
+    // 2. Administrador: ve todo (sin filtros)
+    if (roleName === 'Administrador') {
+      return {};
+    }
+
+    // 3. Otros roles (Párroco, Secretaria, etc.): ven reservas de su parroquia
+    if (parroquiaId) {
+      return { parroquiaid: parroquiaId };
+    }
+
+    // Fallback: si no es admin y no tiene parroquia, quizás no debería ver nada o todo?
+    // Asumiremos que si tiene permiso 'liturgico_reservas_ver' pero no parroquia, ve todo (o nada).
+    // Por seguridad, si no es admin y no encaja en reglas, mejor no filtrar (o filtrar todo).
+    // Pero dejaremos {} por ahora si tiene permiso.
+    return {};
+  }, [user]);
+
+  const { items, loading, error, createItem, updateItem, removeItem } = useLiturgicalReservations({
+    autoList: true,
+    filters
+  });
   const [searchParams, setSearchParams] = useSearchParams();
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit' | 'view'
@@ -1218,16 +1252,16 @@ const Reservacion = () => {
         icon={Calendar}
       >
         {canCreate && (
-        <motion.button
-          onClick={() => { setCurrent({}); setModalMode('add'); setModalOpen(true); }}
-          className="text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110"
-          style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <Plus className="w-4 h-4" />
-          Nueva Reserva
-        </motion.button>
+          <motion.button
+            onClick={() => { setCurrent({}); setModalMode('add'); setModalOpen(true); }}
+            className="text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110"
+            style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <Plus className="w-4 h-4" />
+            Nueva Reserva
+          </motion.button>
         )}
       </PageHeader>
 

@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Calendar as BigCalendar, dateFnsLocalizer } from 'react-big-calendar';
-import { format, parse, startOfWeek, getDay, isBefore, startOfDay } from 'date-fns';
+import { format, parse, startOfWeek, getDay, isBefore, startOfDay, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Clock, Plus, Calendar, AlertCircle, RefreshCw } from 'lucide-react';
 import ActoLiturgicoModal from '../../components/Modals/ModalActoLiturgico';
@@ -73,14 +73,20 @@ const VIEW_LABELS = {
 const isEventFinished = (startDateStr, endDateStr, hasExplicitEnd = false) => {
   if (!startDateStr) return false;
   const today = startOfDay(new Date());
-  const startDate = startOfDay(new Date(startDateStr));
+
+  // Usar parse para evitar problemas de zona horaria con strings 'yyyy-MM-dd'
+  const startDate = startOfDay(parse(startDateStr, 'yyyy-MM-dd', new Date()));
 
   if (!hasExplicitEnd) {
     return startDate < today;
   }
 
   if (!endDateStr) return false;
-  const endDate = startOfDay(new Date(endDateStr));
+  const endDate = startOfDay(parse(endDateStr, 'yyyy-MM-dd', new Date()));
+
+  // Debug log para verificar comparación de fechas
+  // console.log('[isEventFinished]', { startDate, endDate, today, isFinished: endDate < today });
+
   return endDate < today;
 };
 
@@ -168,8 +174,15 @@ const localizer = dateFnsLocalizer({
 const Horarios = () => {
   const { items, loading, error, refetch } = useLiturgicalCalendar();
   const { createItem } = useLiturgicalReservations({ autoList: false });
-  const { user, authFetch } = useAuth();
+  const { user, authFetch, reloadProfile, hasPermission } = useAuth();
   const navigate = useNavigate();
+
+  // Asegurar que el perfil tenga persona/parroquia cargada
+  useEffect(() => {
+    if (user && !user.persona && typeof reloadProfile === 'function') {
+      reloadProfile();
+    }
+  }, [user, reloadProfile]);
 
   // Efecto para los estilos del calendario
   useEffect(() => {
@@ -220,7 +233,7 @@ const Horarios = () => {
   const [parroquias, setParroquias] = useState([]);
   const [pendingActoLiturgico, setPendingActoLiturgico] = useState(null);
   const [horarios, setHorarios] = useState([]);
-  
+
   // Estados para el modal de acto litúrgico
   const [actoLiturgicoModalOpen, setActoLiturgicoModalOpen] = useState(false);
   const [actoLiturgicoData, setActoLiturgicoData] = useState({
@@ -252,6 +265,15 @@ const Horarios = () => {
   const [selectedParroquia, setSelectedParroquia] = useState('');
   // Entrada editable para el filtro de parroquia
   const [parroquiaInput, setParroquiaInput] = useState('');
+
+  // Lógica para mostrar/ocultar botones de creación
+  const normalizedRole = (user?.role || '').toString().toLowerCase();
+  const isAdmin = normalizedRole === 'administrador' || normalizedRole === 'admin';
+  const userParroquiaId = user?.persona?.parroquiaid || null;
+
+  // Combinar lógica de permisos con restricciones de rol y parroquia
+  const canCreateActo = hasPermission('liturgico_horarios_AgregarActo') &&
+    (isAdmin || !selectedParroquia || (userParroquiaId && String(selectedParroquia) === String(userParroquiaId)));
   // Abre el modal de creación de un Acto Litúrgico con valores iniciales opcionales
   const openActoModal = (preset = {}) => {
     const initial = {
@@ -660,23 +682,23 @@ const Horarios = () => {
   const openActoLiturgicoModal = useCallback(({ dateStr, timeStr, parroquiaid, actoNombre, fechaInicio, fechaFin }) => {
     console.log('[Horarios] openActoLiturgicoModal payload', { dateStr, timeStr, parroquiaid, actoNombre, fechaInicio, fechaFin });
     if (!dateStr) return;
-    
+
     const newData = {
       acto_nombre: actoNombre || '',
       act_titulo: '',
       act_descripcion: '',
       h_fecha: dateStr,
       h_hora: timeStr || '',
-      h_fecha_fin: fechaFin || '',
+      h_fecha_fin: fechaFin || dateStr || '',
       h_hora_fin: '',
       act_estado: true,
       parroquiaid: parroquiaid || selectedParroquia || ''
     };
-    
+
     setActoLiturgicoData(newData);
     setActoLiturgicoModalOpen(true);
   }, [selectedParroquia]);
-    
+
 
   // Confirmar creación de reserva
   const confirmReservation = useCallback(() => {
@@ -696,6 +718,8 @@ const Horarios = () => {
     setPendingActoLiturgico(null);
   }, [pendingActoLiturgico, openActoLiturgicoModal]);
 
+  const [selectedSlotDate, setSelectedSlotDate] = useState(null);
+
   // REEMPLAZA handleSelectSlot por esta versión mejorada
   const handleSelectSlot = useCallback(({ start, end }) => {
     if (!start || !end || !(start instanceof Date) || !(end instanceof Date) || isNaN(start.getTime()) || isNaN(end.getTime())) {
@@ -707,35 +731,56 @@ const Horarios = () => {
       console.log('[Horarios] handleSelectSlot start', { start, end, eventsCount: events.length });
       const today = startOfDay(new Date());
       const selectedDate = startOfDay(start);
-      if (isBefore(selectedDate, today)) return;
+
+      // Permitir selección de fechas pasadas si se desea, o mantener restricción:
+      // if (isBefore(selectedDate, today)) return; 
 
       const dateStr = format(start, 'yyyy-MM-dd');
       const timeStr = format(start, 'HH:mm');
 
-      // Buscar un evento EXACTO en la misma fecha/hora (si existe)
-      const matchingEvent = events.find(evt => {
-        try {
-          return evt.start instanceof Date && evt.start.getTime() === start.getTime();
-        } catch { return false; }
-      });
+      // Calcular fecha final correcta (manejo de rangos)
+      let endDateStr = format(end, 'yyyy-MM-dd');
 
-      if (matchingEvent) {
-        const raw = matchingEvent.raw || {};
-        const horarioId = raw.horarioid || matchingEvent.id;
-        const parroquiaId = raw.parroquiaid || raw.parroquia?.parroquiaid || selectedParroquia || null;
-        console.log('[Horarios] handleSelectSlot exact match', { horarioId, parroquiaId });
-        openReservationModal({
-          dateStr: raw.h_fecha || raw.date || dateStr,
-          timeStr: raw.h_hora || raw.time || timeStr,
-          horarioid: horarioId,
-          parroquiaid: parroquiaId,
-          actoNombre: raw.acto_nombre || raw.act_nombre || matchingEvent.type,
-          actoTitulo: raw.acto_titulo || matchingEvent.title
-        });
-        return;
+      // En vista mensual o selección de día completo, 'end' es exclusivo (inicio del día siguiente)
+      // Si start y end son horas 00:00, asumimos selección de días
+      const isAllDay = (start.getHours() === 0 && start.getMinutes() === 0 && end.getHours() === 0 && end.getMinutes() === 0);
+
+      if (view === 'month' || isAllDay) {
+        // Restar 1 día para obtener la fecha inclusiva
+        // Ejemplo: Click en 10 Ene -> start=10 00:00, end=11 00:00 -> queremos 10 Ene
+        // Ejemplo: Rango 10-12 Ene -> start=10 00:00, end=13 00:00 -> queremos 12 Ene
+        const inclusiveEnd = subDays(end, 1);
+        endDateStr = format(inclusiveEnd, 'yyyy-MM-dd');
       }
 
-      
+      // Buscar un evento EXACTO en la misma fecha/hora (si existe)
+      // Nota: Esto solo tiene sentido para clicks simples, no rangos.
+      // Si la diferencia es mayor a 1 día (o 1 slot), asumimos intención de crear rango nuevo.
+      const isRangeSelection = (end.getTime() - start.getTime()) > (24 * 60 * 60 * 1000); // Más de 1 día
+
+      if (!isRangeSelection) {
+        const matchingEvent = events.find(evt => {
+          try {
+            return evt.start instanceof Date && evt.start.getTime() === start.getTime();
+          } catch { return false; }
+        });
+
+        if (matchingEvent) {
+          const raw = matchingEvent.raw || {};
+          const horarioId = raw.horarioid || matchingEvent.id;
+          const parroquiaId = raw.parroquiaid || raw.parroquia?.parroquiaid || selectedParroquia || null;
+          console.log('[Horarios] handleSelectSlot exact match', { horarioId, parroquiaId });
+          openReservationModal({
+            dateStr: raw.h_fecha || raw.date || dateStr,
+            timeStr: raw.h_hora || raw.time || timeStr,
+            horarioid: horarioId,
+            parroquiaid: parroquiaId,
+            actoNombre: raw.acto_nombre || raw.act_nombre || matchingEvent.type,
+            actoTitulo: raw.acto_titulo || matchingEvent.title
+          });
+          return;
+        }
+      }
 
       const sameDayEvents = events
         .filter(evt => {
@@ -746,8 +791,12 @@ const Horarios = () => {
         })
         .sort((a, b) => (a.start?.getTime() || 0) - (b.start?.getTime() || 0));
 
-      if (sameDayEvents.length === 0) {
-        setNoSchedulesOpen(true);
+      // Si no hay eventos o si estamos seleccionando un rango explícito, abrimos el diálogo de creación
+      if (sameDayEvents.length === 0 || isRangeSelection) {
+        if (canCreateActo) {
+          setSelectedSlotDate({ dateStr, timeStr, endDateStr });
+          setNoSchedulesOpen(true);
+        }
         return;
       }
 
@@ -760,7 +809,7 @@ const Horarios = () => {
       console.log('[Horarios] handleSelectSlot same-day fallback', { fallbackDate, fallbackTime, horarioId, parroquiaId });
 
       openReservationModal({
-        dateStr: raw.h_fecha || raw.date || fallbackDate,
+        dateStr: dateStr, // Usar la fecha del slot clickeado, no la del evento original
         timeStr: raw.h_hora || raw.time || fallbackTime,
         horarioid: horarioId,
         parroquiaid: parroquiaId,
@@ -770,7 +819,7 @@ const Horarios = () => {
     } catch (error) {
       console.error('Error en handleSelectSlot:', error);
     }
-  }, [confirmOpen, noSchedulesOpen, events, selectedParroquia, openReservationModal]);
+  }, [confirmOpen, noSchedulesOpen, events, selectedParroquia, openReservationModal, view, canCreateActo]);
 
   // Reemplazar handleSelectEvent por la versión que busca en `events` y normaliza campos
   const handleSelectEvent = useCallback((clicked) => {
@@ -817,7 +866,12 @@ const Horarios = () => {
       }
 
       if (!payload || !payload.dateStr) return;
-      if (isEventFinished(payload.dateStr, payload.endDateStr, payload.hasExplicitEnd)) return;
+
+      const finished = isEventFinished(payload.dateStr, payload.endDateStr, payload.hasExplicitEnd);
+      if (finished) {
+        console.log('[Horarios] Evento finalizado, no se abre modal', payload);
+        return;
+      }
 
       console.log('[Horarios] handleSelectEvent payload', payload);
       openReservationModal(payload);
@@ -1363,29 +1417,34 @@ const Horarios = () => {
             initialValues={actoLiturgicoData}
             onCreated={() => {
               // Refresh events when a new liturgical act is created
-              if (typeof refetchEvents === 'function') {
-                refetchEvents();
+              if (refetch) refetch();
+              if (selectedParroquia) {
+                loadHorarios(selectedParroquia);
+              } else {
+                loadHorarios(); // Refresh global list if needed or just rely on refetch
               }
               setActoLiturgicoModalOpen(false);
             }}
           />
         )}
-        <motion.button
-          onClick={() => openActoLiturgicoModal({
-            dateStr: format(new Date(), 'yyyy-MM-dd'),
-            timeStr: '',
-            parroquiaid: selectedParroquia || '',
-            actoNombre: '',
-            actoTitulo: ''
-          })}
-          className="text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110 shadow-lg"
-          style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' }}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <Plus className="w-4 h-4" />
-          Agregar Acto Litúrgico
-        </motion.button>
+        {canCreateActo && (
+          <motion.button
+            onClick={() => openActoLiturgicoModal({
+              dateStr: format(new Date(), 'yyyy-MM-dd'),
+              timeStr: '',
+              parroquiaid: selectedParroquia || '',
+              actoNombre: '',
+              actoTitulo: ''
+            })}
+            className="text-white px-5 py-2.5 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110 shadow-lg"
+            style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <Plus className="w-4 h-4" />
+            Agregar Acto Litúrgico
+          </motion.button>
+        )}
 
         <motion.button
           onClick={() => openReservationModal({
@@ -1600,9 +1659,12 @@ const Horarios = () => {
         mensaje="No hay horarios programados para esta fecha. ¿Desea crear un nuevo acto litúrgico?"
         onConfirmar={() => {
           setNoSchedulesOpen(false);
+          const d = selectedSlotDate?.dateStr || format(new Date(), 'yyyy-MM-dd');
+          const dFin = selectedSlotDate?.endDateStr || d;
           openActoLiturgicoModal({
-            dateStr: format(new Date(), 'yyyy-MM-dd'),
-            timeStr: '',
+            dateStr: d,
+            timeStr: selectedSlotDate?.timeStr || '',
+            fechaFin: dFin,
             parroquiaid: selectedParroquia || '',
             actoNombre: '',
             actoTitulo: ''
