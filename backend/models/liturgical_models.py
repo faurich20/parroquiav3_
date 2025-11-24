@@ -13,6 +13,7 @@ class ActoLiturgico(Base):
     act_titulo = Column(String(200), nullable=False)  # ej. Misa Dominical
     act_descripcion = Column(Text, nullable=True)
     act_estado = Column(Boolean, nullable=False, default=True)
+    act_max_reservas = Column(Integer, nullable=True)
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
 
@@ -29,6 +30,7 @@ class ActoLiturgico(Base):
             'act_titulo': self.act_titulo,
             'act_descripcion': self.act_descripcion,
             'act_estado': self.act_estado,
+            'act_max_reservas': self.act_max_reservas,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

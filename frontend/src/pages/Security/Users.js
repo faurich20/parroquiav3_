@@ -42,7 +42,7 @@ const UsersPage = () => {
                 if (!resp.ok) return;
                 const data = await resp.json();
                 setRolesList(Array.isArray(data.roles) ? data.roles : []);
-            } catch {}
+            } catch { }
         };
         const loadParroquias = async () => {
             try {
@@ -50,7 +50,7 @@ const UsersPage = () => {
                 if (!resp.ok) return;
                 const data = await resp.json();
                 setParroquias(Array.isArray(data.parroquias) ? data.parroquias : []);
-            } catch {}
+            } catch { }
         };
         if (isModalOpen) { loadRoles(); loadParroquias(); }
     }, [isModalOpen, authFetch]);
@@ -136,7 +136,7 @@ const UsersPage = () => {
                     if (typeof data.available === 'boolean') return !data.available;
                     if (Array.isArray(data.users)) return data.users.some(u => (u.email || '').toLowerCase() === email.toLowerCase());
                 }
-            } catch {}
+            } catch { }
         }
         return false;
     };
@@ -287,7 +287,6 @@ const UsersPage = () => {
                             rowKey={(u) => u.id}
                             searchTerm={searchTerm}
                             searchKeys={['name', 'email']}
-                            itemsPerPage={7}
                             hover
                             striped
                             emptyText="No hay usuarios"

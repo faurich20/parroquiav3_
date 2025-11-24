@@ -6,6 +6,8 @@ from app import db
 from app.models import ActoLiturgico, Horario, Reserva
 from app.utils.permissions import permission_required, has_permission
 
+
+
 liturgical_bp = Blueprint('liturgical', __name__)
 
 # Helpers
@@ -109,16 +111,27 @@ def create_acto_con_horario():
 
         try:
             # 1. Crear el acto litúrgico
+            # Preparar max_reservas
+            max_res = data.get('act_max_reservas')
+            if max_res is not None and str(max_res).strip():
+                try:
+                    max_res = int(max_res)
+                except ValueError:
+                    max_res = None
+            else:
+                max_res = None
+
             acto_result = db.session.execute(text("""
-                INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
-                VALUES (:parroquiaid, :act_nombre, :act_titulo, :act_descripcion, :act_estado)
+                INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado, act_max_reservas)
+                VALUES (:parroquiaid, :act_nombre, :act_titulo, :act_descripcion, :act_estado, :act_max_reservas)
                 RETURNING actoliturgicoid
             """), {
                 'parroquiaid': data.get('parroquiaid'),
                 'act_nombre': (data.get('act_nombre') or '').strip(),
                 'act_titulo': (data.get('act_titulo') or '').strip(),
                 'act_descripcion': (data.get('act_descripcion') or '').strip() or None,
-                'act_estado': bool(data.get('act_estado', True))
+                'act_estado': bool(data.get('act_estado', True)),
+                'act_max_reservas': max_res
             })
 
             acto_id = acto_result.fetchone().actoliturgicoid
@@ -237,6 +250,7 @@ def list_actos():
                 a.act_titulo,
                 a.act_descripcion,
                 a.act_estado,
+                a.act_max_reservas,
                 a.created_at,
                 a.updated_at,
                 h.horarioid,
@@ -272,6 +286,7 @@ def list_actos():
                 'act_titulo': row.act_titulo,
                 'act_descripcion': row.act_descripcion,
                 'act_estado': row.act_estado,
+                'act_max_reservas': row.act_max_reservas,
                 'horarioid': row.horarioid,
                 'h_fecha': row.h_fecha.isoformat() if row.h_fecha else None,
                 'h_hora': row.h_hora.strftime('%H:%M') if row.h_hora else None,
@@ -280,116 +295,11 @@ def list_actos():
                 'created_at': row.created_at.isoformat() if row.created_at else None,
                 'updated_at': row.updated_at.isoformat() if row.updated_at else None
             })
-
+        
+        print('[list_actos] sending items:', result)
         return jsonify({'items': result}), 200
     except Exception as e:
         print('Error list_actos', e)
-        return jsonify({'error': 'Error interno del servidor'}), 500
-
-@liturgical_bp.route('/actos', methods=['POST'])
-@jwt_required()
-@permission_required('liturgico_actos', 'liturgico_actos_crear')
-def create_acto():
-    """Crea un nuevo acto litúrgico (opcionalmente con horario)"""
-    try:
-        data = request.get_json() or {}
-
-        required = [
-            data.get('parroquiaid'),
-            data.get('act_nombre'),
-            data.get('act_titulo')
-        ]
-
-        if any(v in [None, '', False] for v in required):
-            return jsonify({'error': 'parroquiaid, act_nombre y act_titulo son requeridos'}), 400
-
-        # Iniciar transacción
-        acto_id = None
-        horario_id = None
-
-        try:
-            # 1. Crear el acto litúrgico
-            result = db.session.execute(text("""
-                INSERT INTO public.actoliturgico (parroquiaid, act_nombre, act_titulo, act_descripcion, act_estado)
-                VALUES (:parroquiaid, :act_nombre, :act_titulo, :act_descripcion, :act_estado)
-                RETURNING actoliturgicoid, created_at, updated_at
-            """), {
-                'parroquiaid': data.get('parroquiaid'),
-                'act_nombre': (data.get('act_nombre') or '').strip(),
-                'act_titulo': (data.get('act_titulo') or '').strip(),
-                'act_descripcion': (data.get('act_descripcion') or '').strip() or None,
-                'act_estado': bool(data.get('act_estado', True))
-            })
-
-            acto_id = result.fetchone().actoliturgicoid
-
-            # 2. Crear horario si se proporcionan fecha y hora
-            if 'h_fecha' in data and 'h_hora' in data:
-                h_fecha = parse_date(data.get('h_fecha'))
-                h_hora = parse_time(data.get('h_hora'))
-
-                if h_fecha and h_hora:
-                    horario_result = db.session.execute(text("""
-                        INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora)
-                        VALUES (:actoliturgicoid, :h_fecha, :h_hora)
-                        RETURNING horarioid
-                    """), {
-                        'actoliturgicoid': acto_id,
-                        'h_fecha': h_fecha,
-                        'h_hora': h_hora
-                    })
-                    horario_id = horario_result.fetchone().horarioid
-
-            db.session.commit()
-
-            # Obtener el acto creado completo
-            acto = db.session.execute(text("""
-                SELECT
-                    a.actoliturgicoid,
-                    a.parroquiaid,
-                    p.par_nombre as parroquia_nombre,
-                    a.act_nombre,
-                    a.act_titulo,
-                    a.act_descripcion,
-                    a.act_estado,
-                    a.created_at,
-                    a.updated_at,
-                    h.horarioid,
-                    h.h_fecha,
-                    h.h_hora,
-                    h.h_fecha_fin,
-                    h.h_hora_fin,
-                    h.created_at as horario_created_at
-                FROM public.actoliturgico a
-                LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
-                LEFT JOIN public.horario h ON a.actoliturgicoid = h.actoliturgicoid
-                WHERE a.actoliturgicoid = :id
-            """), {'id': acto_id}).fetchone()
-
-            return jsonify({
-                'item': {
-                    'actoliturgicoid': acto.actoliturgicoid,
-                    'parroquiaid': acto.parroquiaid,
-                    'parroquia_nombre': acto.parroquia_nombre,
-                    'act_nombre': acto.act_nombre,
-                    'act_titulo': acto.act_titulo,
-                    'act_descripcion': acto.act_descripcion,
-                    'act_estado': acto.act_estado,
-                    'horarioid': acto.horarioid,
-                    'h_fecha': acto.h_fecha.isoformat() if acto.h_fecha else None,
-                    'h_hora': acto.h_hora.strftime('%H:%M') if acto.h_hora else None,
-                    'created_at': acto.created_at.isoformat() if acto.created_at else None,
-                    'updated_at': acto.updated_at.isoformat() if acto.updated_at else None
-                }
-            }), 201
-
-        except Exception as inner_e:
-            db.session.rollback()
-            raise inner_e
-
-    except Exception as e:
-        print('Error create_acto', e)
-        db.session.rollback()
         return jsonify({'error': 'Error interno del servidor'}), 500
 
 @liturgical_bp.route('/actos/<int:acto_id>', methods=['PUT'])
@@ -419,6 +329,17 @@ def update_acto(acto_id):
         if 'act_estado' in data:
             set_parts_acto.append('act_estado = :act_estado')
             params['act_estado'] = bool(data.get('act_estado'))
+        if 'act_max_reservas' in data:
+            set_parts_acto.append('act_max_reservas = :act_max_reservas')
+            max_res = data.get('act_max_reservas')
+            if max_res is not None and str(max_res).strip():
+                try:
+                    max_res = int(max_res)
+                except ValueError:
+                    max_res = None
+            else:
+                max_res = None
+            params['act_max_reservas'] = max_res
 
         if not set_parts_acto:
             return jsonify({'error': 'No hay datos para actualizar'}), 400
@@ -432,14 +353,20 @@ def update_acto(acto_id):
             result_acto = db.session.execute(text(query_acto), params)
 
             # 2. Actualizar horario si hay cambios en fecha/hora
-            if 'h_fecha' in data or 'h_hora' in data:
+            if 'h_fecha' in data or 'h_hora' in data or 'h_fecha_fin' in data or 'h_hora_fin' in data:
                 h_fecha = None
                 h_hora = None
+                h_fecha_fin = None
+                h_hora_fin = None
 
                 if 'h_fecha' in data and data.get('h_fecha'):
                     h_fecha = parse_date(data.get('h_fecha'))
                 if 'h_hora' in data and data.get('h_hora'):
                     h_hora = parse_time(data.get('h_hora'))
+                if 'h_fecha_fin' in data and data.get('h_fecha_fin'):
+                    h_fecha_fin = parse_date(data.get('h_fecha_fin'))
+                if 'h_hora_fin' in data and data.get('h_hora_fin'):
+                    h_hora_fin = parse_time(data.get('h_hora_fin'))
 
                 if h_fecha and h_hora:
                     # Verificar si ya existe horario para este acto
@@ -452,22 +379,26 @@ def update_acto(acto_id):
                         # Actualizar horario existente
                         db.session.execute(text("""
                             UPDATE public.horario
-                            SET h_fecha = :h_fecha, h_hora = :h_hora
+                            SET h_fecha = :h_fecha, h_hora = :h_hora, h_fecha_fin = :h_fecha_fin, h_hora_fin = :h_hora_fin
                             WHERE actoliturgicoid = :acto_id
                         """), {
                             'acto_id': acto_id,
                             'h_fecha': h_fecha,
-                            'h_hora': h_hora
+                            'h_hora': h_hora,
+                            'h_fecha_fin': h_fecha_fin,
+                            'h_hora_fin': h_hora_fin
                         })
                     else:
                         # Crear nuevo horario
                         db.session.execute(text("""
-                            INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora)
-                            VALUES (:actoliturgicoid, :h_fecha, :h_hora)
+                            INSERT INTO public.horario (actoliturgicoid, h_fecha, h_hora, h_fecha_fin, h_hora_fin)
+                            VALUES (:actoliturgicoid, :h_fecha, :h_hora, :h_fecha_fin, :h_hora_fin)
                         """), {
                             'actoliturgicoid': acto_id,
                             'h_fecha': h_fecha,
-                            'h_hora': h_hora
+                            'h_hora': h_hora,
+                            'h_fecha_fin': h_fecha_fin,
+                            'h_hora_fin': h_hora_fin
                         })
 
             db.session.commit()
@@ -485,6 +416,7 @@ def update_acto(acto_id):
                     a.act_titulo,
                     a.act_descripcion,
                     a.act_estado,
+                    a.act_max_reservas,
                     a.created_at,
                     a.updated_at,
                     h.horarioid,
@@ -500,6 +432,8 @@ def update_acto(acto_id):
             """), {'id': acto_id}).fetchone()
 
             return jsonify({
+                'success': True,
+                'message': 'Acto actualizado correctamente',
                 'item': {
                     'actoliturgicoid': acto.actoliturgicoid,
                     'parroquiaid': acto.parroquiaid,
@@ -508,6 +442,7 @@ def update_acto(acto_id):
                     'act_titulo': acto.act_titulo,
                     'act_descripcion': acto.act_descripcion,
                     'act_estado': acto.act_estado,
+                    'act_max_reservas': acto.act_max_reservas,
                     'horarioid': acto.horarioid,
                     'h_fecha': acto.h_fecha.isoformat() if acto.h_fecha else None,
                     'h_hora': acto.h_hora.strftime('%H:%M') if acto.h_hora else None,
@@ -585,6 +520,7 @@ def list_horarios():
                 h.actoliturgicoid,
                 a.act_nombre,
                 a.act_titulo,
+                a.act_max_reservas,
                 h.h_fecha,
                 h.h_hora,
                 h.h_fecha_fin,
@@ -598,7 +534,7 @@ def list_horarios():
             LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
             LEFT JOIN public.reserva r ON h.horarioid = r.horarioid
             {where_sql}
-            GROUP BY h.horarioid, h.actoliturgicoid, a.act_nombre, a.act_titulo, h.h_fecha, h.h_hora, a.parroquiaid, p.par_nombre
+            GROUP BY h.horarioid, h.actoliturgicoid, a.act_nombre, a.act_titulo, a.act_max_reservas, h.h_fecha, h.h_hora, h.h_fecha_fin, h.h_hora_fin, a.parroquiaid, p.par_nombre
             ORDER BY h.h_fecha DESC, h.h_hora DESC
         """), params).fetchall()
 
@@ -609,6 +545,7 @@ def list_horarios():
                 'actoliturgicoid': row.actoliturgicoid,
                 'acto_nombre': row.act_nombre,
                 'acto_titulo': row.act_titulo,
+                'act_max_reservas': row.act_max_reservas,
                 'h_fecha': row.h_fecha.isoformat() if row.h_fecha else None,
                 'h_hora': row.h_hora.strftime('%H:%M') if row.h_hora else None,
                 'h_fecha_fin': row.h_fecha_fin.isoformat() if row.h_fecha_fin else None,
@@ -616,6 +553,7 @@ def list_horarios():
                 'parroquiaid': row.parroquiaid,
                 'parroquia_nombre': row.parroquia_nombre,
                 'reservas_total': row.reservas_total,
+                'disponibles': (row.act_max_reservas - row.reservas_total) if row.act_max_reservas else None,
                 'created_at': getattr(row, 'created_at', None).isoformat() if getattr(row, 'created_at', None) else None,
                 'updated_at': getattr(row, 'updated_at', None).isoformat() if getattr(row, 'updated_at', None) else None
             })
@@ -771,17 +709,18 @@ def list_reservas():
                 h.h_hora,
                 h.h_fecha_fin,
                 h.h_hora_fin,
-                h.created_at as horario_created_at,                                              
                 a.act_nombre,
                 a.act_titulo,
+                a.parroquiaid,
                 p.par_nombre as parroquia_nombre,
                 COALESCE(
                     per.per_nombres || ' ' || per.per_apellidos,
                     r.res_persona_nombre
                 ) as persona_nombre,
-                -- Estado del pago: si pagoid es NULL → 'pendiente', sino pago_estado
+                pg.pago_medio,
+                pg.pago_monto,
                 COALESCE(pg.pago_estado, 'pendiente') as pago_estado,
-                COALESCE(pg.pago_estado, 'pendiente') as estado_texto
+                pg.pago_descripcion
             FROM public.reserva r
             LEFT JOIN public.horario h ON r.horarioid = h.horarioid
             LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
@@ -794,6 +733,10 @@ def list_reservas():
 
         items = db.session.execute(query, params).fetchall()
 
+        print(f'📋 [list_reservas] Params: {params}')
+        print(f'📋 [list_reservas] WHERE: {where_sql}')
+        print(f'📋 [list_reservas] Items encontrados: {len(items)}')
+
         result = []
         for row in items:
             result.append({
@@ -805,19 +748,24 @@ def list_reservas():
                 'res_persona_nombre': row.res_persona_nombre,
                 'persona_nombre': row.persona_nombre,
                 'res_descripcion': row.res_descripcion,
-                'pago_estado': row.pago_estado,  # Estado del pago desde tabla pago
-                'estado_texto': row.estado_texto.capitalize() if row.estado_texto else 'Pendiente',
                 'h_fecha': row.h_fecha.isoformat() if row.h_fecha else None,
                 'h_hora': row.h_hora.strftime('%H:%M') if row.h_hora else None,
                 'h_fecha_fin': row.h_fecha_fin.isoformat() if row.h_fecha_fin else None,
                 'h_hora_fin': row.h_hora_fin.strftime('%H:%M') if row.h_hora_fin else None,
                 'acto_nombre': row.act_nombre,
                 'acto_titulo': row.act_titulo,
+                'parroquiaid': row.parroquiaid,
                 'parroquia_nombre': row.parroquia_nombre,
+                # Campos de pago (pueden ser NULL)
+                'pago_medio': row.pago_medio if row.pagoid else None,
+                'pago_monto': float(row.pago_monto) if row.pago_monto else None,
+                'pago_estado': row.pago_estado,
+                'pago_descripcion': row.pago_descripcion if row.pagoid else None,
                 'created_at': row.created_at.isoformat() if row.created_at else None,
                 'updated_at': row.updated_at.isoformat() if row.updated_at else None
             })
 
+        print(f'📋 [list_reservas] Retornando {len(result)} items')
         return jsonify({'items': result}), 200
     except Exception as e:
         print('Error list_reservas', e)
@@ -857,6 +805,40 @@ def create_reserva():
         
         # No manejar res_estado aquí - se obtiene dinámicamente de tabla pago
 
+        # VALIDACIÓN: Verificar límite de reservas para el acto litúrgico
+        # Contar TODAS las reservas (sin importar estado de pago)
+        horarioid = data.get('horarioid')
+        limite_check = db.session.execute(text("""
+            SELECT 
+                a.act_max_reservas,
+                COUNT(r.reservaid) as reservas_actuales
+            FROM public.horario h
+            INNER JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
+            LEFT JOIN public.reserva r ON r.horarioid = h.horarioid
+            WHERE h.horarioid = :horarioid
+            GROUP BY a.act_max_reservas
+        """), {'horarioid': horarioid}).fetchone()
+
+        # Debug: Imprimir detalles de la validación
+        print(f"🔍 [VALIDACIÓN CUPOS] horarioid={horarioid}")
+        if limite_check:
+            print(f"   ✅ act_max_reservas={limite_check.act_max_reservas}")
+            print(f"   ✅ reservas_actuales={limite_check.reservas_actuales}")
+        else:
+            print(f"   ❌ No se encontró el horario")
+
+        if limite_check and limite_check.act_max_reservas is not None and limite_check.act_max_reservas > 0:
+            if limite_check.reservas_actuales >= limite_check.act_max_reservas:
+                print(f"   🚫 RECHAZADO: {limite_check.reservas_actuales} >= {limite_check.act_max_reservas}")
+                return jsonify({
+                    'success': False,
+                    'error': f'No hay cupos disponibles. Máximo de reservas: {limite_check.act_max_reservas}. Reservas actuales: {limite_check.reservas_actuales}',
+                    'disponibles': 0,
+                    'maximo': limite_check.act_max_reservas
+                }), 400
+            else:
+                print(f"   ✅ Cupos disponibles: {limite_check.act_max_reservas - limite_check.reservas_actuales}")
+
         # Si hay datos de pago, crear pago primero y luego reserva con pagoid
         pagoid = data.get('pagoid')
         pago_data = None
@@ -870,7 +852,7 @@ def create_reserva():
 
                 pago = Pago(
                     pago_medio=data.get('pago_medio'),
-                    pago_monto=float(data.get('pago_monto')),
+                    pago_monto=float(data.get('pago_monto') or 0),
                     pago_estado=data.get('pago_estado', 'pagado'),
                     pago_descripcion=data.get('pago_descripcion', ''),
                     pago_fecha=datetime.fromisoformat(data.get('pago_fecha', datetime.now().isoformat()).replace('Z', '+00:00')),
@@ -929,9 +911,10 @@ def create_reserva():
                     per.per_nombres || ' ' || per.per_apellidos,
                     r.res_persona_nombre
                 ) as persona_nombre,
-                -- Estado del pago: si pagoid es NULL → 'pendiente', sino pago_estado
+                pg.pago_medio,
+                pg.pago_monto,
                 COALESCE(pg.pago_estado, 'pendiente') as pago_estado,
-                COALESCE(pg.pago_estado, 'pendiente') as estado_texto
+                pg.pago_descripcion
             FROM public.reserva r
             LEFT JOIN public.horario h ON r.horarioid = h.horarioid
             LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
@@ -965,8 +948,11 @@ def create_reserva():
                 'res_persona_nombre': reserva.res_persona_nombre,
                 'persona_nombre': reserva.persona_nombre,
                 'res_descripcion': reserva.res_descripcion,
-                'pago_estado': reserva.pago_estado,
-                'estado_texto': reserva.estado_texto.capitalize() if reserva.estado_texto else 'Pendiente',
+                # Campos de pago (pueden ser NULL)
+                'pago_medio': reserva.pago_medio if reserva.pagoid else None,
+                'pago_monto': float(reserva.pago_monto) if reserva.pago_monto else None,
+                'pago_estado': reserva.pago_estado if reserva.pagoid else 'pendiente',
+                'pago_descripcion': reserva.pago_descripcion if reserva.pagoid else None,
                 'h_fecha': reserva.h_fecha.isoformat() if reserva.h_fecha else None,
                 'h_hora': reserva.h_hora.strftime('%H:%M') if reserva.h_hora else None,
                 'h_fecha_fin': reserva.h_fecha_fin.isoformat() if reserva.h_fecha_fin else None,
@@ -1011,12 +997,57 @@ def update_reserva(reservaid):
         
         # No manejar res_estado aquí - se obtiene dinámicamente de tabla pago
         
+        # Verificar si la reserva tiene pago asociado
+        current_reserva = db.session.execute(text("SELECT pagoid FROM public.reserva WHERE reservaid = :id"), {'id': reservaid}).fetchone()
+        pagoid = current_reserva.pagoid if current_reserva else None
+
+        # Si hay datos de pago (incluyendo solo cambio de estado)
+        if data.get('pago_medio') or data.get('pago_monto') or data.get('pago_estado'):
+            if pagoid:
+                # Actualizar pago existente
+                db.session.execute(text("""
+                    UPDATE public.pago
+                    SET pago_medio = COALESCE(:pago_medio, pago_medio),
+                        pago_monto = COALESCE(:pago_monto, pago_monto),
+                        pago_descripcion = COALESCE(:pago_descripcion, pago_descripcion),
+                        pago_estado = COALESCE(:pago_estado, pago_estado),
+                        updated_at = NOW()
+                    WHERE pagoid = :pagoid
+                """), {
+                    'pagoid': pagoid,
+                    'pago_medio': data.get('pago_medio'),
+                    'pago_monto': float(data.get('pago_monto')) if data.get('pago_monto') else None,
+                    'pago_descripcion': data.get('pago_descripcion'),
+                    'pago_estado': data.get('pago_estado')
+                })
+            else:
+                # Crear nuevo pago
+                from app.models import Pago
+                from datetime import datetime, timedelta
+                
+                try:
+                    pago = Pago(
+                        pago_medio=data.get('pago_medio'),
+                        pago_monto=float(data.get('pago_monto', 0)),
+                        pago_estado=data.get('pago_estado', 'pendiente'),
+                        pago_descripcion=data.get('pago_descripcion', ''),
+                        pago_fecha=datetime.now(),
+                        pago_confirmado=datetime.now(),
+                        pago_expira=datetime.now() + timedelta(hours=24)
+                    )
+                    db.session.add(pago)
+                    db.session.flush()
+                    pagoid = pago.pagoid
+                except Exception as e:
+                    print(f"❌ [BACKEND] Error creando pago en update: {str(e)}")
+
         result = db.session.execute(text("""
             UPDATE public.reserva
             SET horarioid = :horarioid,
                 personaid = :personaid,
                 res_persona_nombre = :res_persona_nombre,
                 res_descripcion = :res_descripcion,
+                pagoid = COALESCE(:pagoid, pagoid),
                 updated_at = NOW()
             WHERE reservaid = :id
             RETURNING reservaid
@@ -1025,7 +1056,8 @@ def update_reserva(reservaid):
             'horarioid': data.get('horarioid'),
             'personaid': personaid,
             'res_persona_nombre': persona_nombre if not personaid else None,
-            'res_descripcion': (data.get('res_descripcion') or '').strip()
+            'res_descripcion': (data.get('res_descripcion') or '').strip(),
+            'pagoid': pagoid
         })
         
         updated = result.fetchone()
@@ -1057,9 +1089,10 @@ def update_reserva(reservaid):
                     per.per_nombres || ' ' || per.per_apellidos,
                     r.res_persona_nombre
                 ) as persona_nombre,
-                -- Estado del pago: si pagoid es NULL → 'pendiente', sino pago_estado
+                pg.pago_medio,
+                pg.pago_monto,
                 COALESCE(pg.pago_estado, 'pendiente') as pago_estado,
-                COALESCE(pg.pago_estado, 'pendiente') as estado_texto
+                pg.pago_descripcion
             FROM public.reserva r
             LEFT JOIN public.horario h ON r.horarioid = h.horarioid
             LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
@@ -1080,8 +1113,11 @@ def update_reserva(reservaid):
                 'res_persona_nombre': reserva.res_persona_nombre,
                 'persona_nombre': reserva.persona_nombre,
                 'res_descripcion': reserva.res_descripcion,
-                'pago_estado': reserva.pago_estado,
-                'estado_texto': reserva.estado_texto.capitalize() if reserva.estado_texto else 'Pendiente',
+                # Campos de pago (pueden ser NULL)
+                'pago_medio': reserva.pago_medio if reserva.pagoid else None,
+                'pago_monto': float(reserva.pago_monto) if reserva.pago_monto else None,
+                'pago_estado': reserva.pago_estado if reserva.pagoid else 'pendiente',
+                'pago_descripcion': reserva.pago_descripcion if reserva.pagoid else None,
                 'h_fecha': reserva.h_fecha.isoformat() if reserva.h_fecha else None,
                 'h_hora': reserva.h_hora.strftime('%H:%M') if reserva.h_hora else None,
                 'h_fecha_fin': reserva.h_fecha_fin.isoformat() if reserva.h_fecha_fin else None,
@@ -1103,21 +1139,33 @@ def update_reserva(reservaid):
 @jwt_required()
 @permission_required('liturgico_reservas_eliminar', 'liturgico_reservas', 'liturgico')
 def delete_reserva(reservaid):
-    """Elimina una reserva"""
+    """Elimina una reserva e incrementa el cupo máximo del acto"""
     try:
-        result = db.session.execute(text("""
+        # Obtener horarioid antes de borrar para saber qué acto actualizar
+        reserva = db.session.execute(text("SELECT horarioid FROM public.reserva WHERE reservaid = :id"), {'id': reservaid}).fetchone()
+        
+        if not reserva:
+            return jsonify({'error': 'Reserva no encontrada'}), 404
+
+        # Eliminar reserva
+        db.session.execute(text("""
             DELETE FROM public.reserva
             WHERE reservaid = :id
-            RETURNING reservaid
         """), {'id': reservaid})
         
-        deleted = result.fetchone()
+        # Incrementar act_max_reservas (según petición usuario: "porque esta dando otro cupo al quitar esta reserva")
+        # Nota: Esto incrementa la CAPACIDAD TOTAL del acto.
+        db.session.execute(text("""
+            UPDATE public.actoliturgico
+            SET act_max_reservas = act_max_reservas + 1
+            FROM public.horario
+            WHERE public.actoliturgico.actoliturgicoid = public.horario.actoliturgicoid
+            AND public.horario.horarioid = :horarioid
+        """), {'horarioid': reserva.horarioid})
+        
         db.session.commit()
         
-        if not deleted:
-            return jsonify({'error': 'Reserva no encontrada'}), 404
-        
-        return jsonify({'success': True, 'message': 'Reserva eliminada correctamente'}), 200
+        return jsonify({'success': True, 'message': 'Reserva eliminada y cupo liberado'}), 200
     
     except Exception as e:
         print('Error delete_reserva', e)
@@ -1142,6 +1190,7 @@ def get_calendario():
                 h.created_at as horario_created_at,
                 a.act_nombre,
                 a.act_titulo,
+                a.act_max_reservas,
                 a.parroquiaid,
                 p.par_nombre as parroquia_nombre,
                 COUNT(r.reservaid) as reservas_count,
@@ -1156,7 +1205,7 @@ def get_calendario():
             WHERE h.h_fecha >= CURRENT_DATE - INTERVAL '30 days'
               AND h.h_fecha < CURRENT_DATE + INTERVAL '60 days'
               AND a.act_estado = TRUE
-            GROUP BY h.h_fecha, h.h_hora, a.act_nombre, a.act_titulo, a.parroquiaid, p.par_nombre, h.horarioid, a.actoliturgicoid
+            GROUP BY h.h_fecha, h.h_hora, a.act_nombre, a.act_titulo, a.act_max_reservas, a.parroquiaid, p.par_nombre, h.horarioid, a.actoliturgicoid, h.h_fecha_fin, h.h_hora_fin, h.created_at
             ORDER BY h.h_fecha, h.h_hora
         """)).fetchall()
 
@@ -1169,6 +1218,7 @@ def get_calendario():
                 'time_end': row.h_hora_fin.strftime('%H:%M') if row.h_hora_fin else None,
                 'type': row.act_nombre,
                 'title': row.act_titulo,
+                'act_max_reservas': row.act_max_reservas,
                 'parroquiaid': row.parroquiaid,
                 'location': row.parroquia_nombre,
                 'reservas_count': row.reservas_count,
@@ -1233,3 +1283,87 @@ def get_horarios_by_date(date_str):
     except Exception as e:
         print('Error get_horarios_by_date', e)
         return jsonify({'error': 'Error interno del servidor'}), 500
+
+# =========================================================
+# DEBUG: Endpoint temporal para revisar reservas
+# =========================================================
+
+@liturgical_bp.route('/debug/reservas/<int:horarioid>', methods=['GET'])
+@jwt_required()
+def debug_reservas_horario(horarioid):
+    """DEBUG: Ver todas las reservas de un horario específico"""
+    try:
+        # Consulta todas las reservas
+        reservas = db.session.execute(text("""
+            SELECT 
+                r.reservaid,
+                r.horarioid,
+                r.res_persona_nombre,
+                r.res_descripcion,
+                r.pagoid,
+                COALESCE(pg.pago_estado, 'pendiente') as pago_estado,
+                r.created_at,
+                CASE WHEN COALESCE(pg.pago_estado, 'pendiente') IN ('pendiente', 'pagado') 
+                     THEN 'ACTIVA' 
+                     ELSE 'INACTIVA' 
+                END as estado_reserva
+            FROM public.reserva r
+            LEFT JOIN public.pago pg ON r.pagoid = pg.pagoid
+            WHERE r.horarioid = :horarioid
+            ORDER BY r.created_at DESC
+        """), {'horarioid': horarioid}).fetchall()
+        
+        # Información del acto
+        acto_info = db.session.execute(text("""
+            SELECT 
+                a.actoliturgicoid,
+                a.act_nombre,
+                a.act_titulo,
+                a.act_max_reservas,
+                h.horarioid,
+                h.h_fecha,
+                h.h_hora
+            FROM public.horario h
+            INNER JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
+            WHERE h.horarioid = :horarioid
+        """), {'horarioid': horarioid}).fetchone()
+        
+        result = {
+            'horarioid': horarioid,
+            'acto_info': {
+                'actoliturgicoid': acto_info.actoliturgicoid if acto_info else None,
+                'act_nombre': acto_info.act_nombre if acto_info else None,
+                'act_titulo': acto_info.act_titulo if acto_info else None,
+                'act_max_reservas': acto_info.act_max_reservas if acto_info else None,
+                'h_fecha': acto_info.h_fecha.isoformat() if acto_info and acto_info.h_fecha else None,
+                'h_hora': acto_info.h_hora.strftime('%H:%M') if acto_info and acto_info.h_hora else None,
+            },
+            'reservas': [],
+            'resumen': {
+                'total': len(reservas),
+                'activas': 0,
+                'inactivas': 0
+            }
+        }
+        
+        for r in reservas:
+            reserva_dict = {
+                'reservaid': r.reservaid,
+                'persona_nombre': r.res_persona_nombre,
+                'descripcion': r.res_descripcion,
+                'pagoid': r.pagoid,
+                'pago_estado': r.pago_estado,
+                'estado_reserva': r.estado_reserva,
+                'created_at': r.created_at.isoformat() if r.created_at else None
+            }
+            result['reservas'].append(reserva_dict)
+            
+            if r.estado_reserva == 'ACTIVA':
+                result['resumen']['activas'] += 1
+            else:
+                result['resumen']['inactivas'] += 1
+        
+        return jsonify(result), 200
+    except Exception as e:
+        print('Error debug_reservas_horario', e)
+        return jsonify({'error': str(e)}), 500

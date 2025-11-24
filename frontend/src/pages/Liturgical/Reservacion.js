@@ -109,27 +109,13 @@ const Reservacion = () => {
 
     const roleName = user.role?.rol_nombre;
     const personaId = user.persona?.personaid;
-    const parroquiaId = user.persona?.parroquiaid;
 
-    // 1. Usuario normal: solo ve sus reservas
+    // 1. Usuario normal: solo ve sus propias reservas
     if (roleName === 'Usuario') {
       return { personaid: personaId };
     }
 
-    // 2. Administrador: ve todo (sin filtros)
-    if (roleName === 'Administrador') {
-      return {};
-    }
-
-    // 3. Otros roles (Párroco, Secretaria, etc.): ven reservas de su parroquia
-    if (parroquiaId) {
-      return { parroquiaid: parroquiaId };
-    }
-
-    // Fallback: si no es admin y no tiene parroquia, quizás no debería ver nada o todo?
-    // Asumiremos que si tiene permiso 'liturgico_reservas_ver' pero no parroquia, ve todo (o nada).
-    // Por seguridad, si no es admin y no encaja en reglas, mejor no filtrar (o filtrar todo).
-    // Pero dejaremos {} por ahora si tiene permiso.
+    // 2. Todos los demás roles (Admin, Párroco, Secretaria, etc.): ven TODAS las reservas
     return {};
   }, [user]);
 
@@ -277,9 +263,17 @@ const Reservacion = () => {
     console.log('🔄 Cargando horarios para:', { parroquiaId, fecha, modalMode });
 
     if (parroquiaId && fecha) {
+      // Si hay parroquia Y fecha, filtrar por ambos
       loadHorarios(parroquiaId, fecha);
-    } else if (modalMode === 'add') {
-      loadHorarios(); // En modo add, cargar todos si no hay filtros
+    } else if (parroquiaId) {
+      // Si solo hay parroquia (sin fecha), filtrar solo por parroquia
+      loadHorarios(parroquiaId, null);
+    } else if (fecha) {
+      // Si solo hay fecha (sin parroquia), filtrar solo por fecha
+      loadHorarios(null, fecha);
+    } else {
+      // Si no hay filtros, cargar todos los horarios
+      loadHorarios();
     }
   }, [modalOpen, modalMode, current?.parroquiaid, current?.h_fecha, loadHorarios]);
 
@@ -853,24 +847,42 @@ const Reservacion = () => {
     {
       key: 'estado',
       header: 'Estado',
-      width: '7%',
+      width: '10%',
       render: (r) => {
-        const estadoValue = r.pago_estado || 'pendiente';
-        const bgColor = estadoValue === 'pendiente'
-          ? 'bg-yellow-100 text-yellow-700'
-          : estadoValue === 'pagado'
-            ? 'bg-green-100 text-green-700'
-            : estadoValue === 'vencido'
-              ? 'bg-orange-100 text-orange-700'
-              : estadoValue === 'fallido'
-                ? 'bg-red-100 text-red-700'
-                : 'bg-gray-100 text-gray-700';
+        const estado = r.pago_estado || 'pendiente';
+        let bgColor = 'bg-gray-100 text-gray-700';
+        let texto = 'Pendiente';
+
+        if (estado === 'pagado') {
+          bgColor = 'bg-green-100 text-green-700';
+          texto = 'Pagado';
+        } else if (estado === 'pendiente') {
+          bgColor = 'bg-yellow-100 text-yellow-700';
+          texto = 'Pendiente';
+        } else if (estado === 'vencido') {
+          bgColor = 'bg-orange-100 text-orange-700';
+          texto = 'Vencido';
+        } else if (estado === 'fallido') {
+          bgColor = 'bg-red-100 text-red-700';
+          texto = 'Fallido';
+        }
+
         return (
           <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${bgColor}`}>
-            {estadoValue.charAt(0).toUpperCase() + estadoValue.slice(1)}
+            {texto}
           </span>
         );
       }
+    },
+    {
+      key: 'monto',
+      header: 'Monto',
+      width: '8%',
+      render: (r) => (
+        <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+          {r.pago_monto ? `S/ ${Number(r.pago_monto).toFixed(2)}` : '-'}
+        </span>
+      )
     },
     buildActionColumn({
       onEdit: canEdit
@@ -880,7 +892,7 @@ const Reservacion = () => {
       onView: canView
         ? (row) => { setCurrent(prepareEditData(row)); setModalMode('view'); setModalOpen(true); }
         : null,
-      width: '35%'
+      width: '30%'
     })
   ]), [prepareEditData, canEdit, canDelete, canView]);
 
@@ -927,15 +939,23 @@ const Reservacion = () => {
       const filtrados = normalizedHorarios.filter(h => {
         if (!h.parroquiaid || !h.h_fecha) return false;
         const match = h.parroquiaid === parroquiaMatch && h.h_fecha === fechaSeleccionada;
-        return match;
+        return match; // Mostrar TODOS los horarios que coincidan, tengan o no cupos
       });
 
       console.log('✅ Horarios filtrados:', filtrados.length);
 
-      return filtrados.map(h => ({
-        value: h.horarioid,
-        label: `${h.h_hora || ''} - ${h.acto_titulo || h.acto_nombre || 'Sin título'}`.trim()
-      }));
+      return filtrados.map(h => {
+        const tieneCupos = h.disponibles === undefined || h.disponibles === null || h.disponibles > 0;
+        const cuposTexto = h.disponibles !== undefined && h.disponibles !== null
+          ? (h.disponibles > 0 ? ` (${h.disponibles} cupos)` : ' (COMPLETO)')
+          : '';
+
+        return {
+          value: h.horarioid,
+          label: `${h.h_hora || ''} - ${h.acto_titulo || h.acto_nombre || 'Sin título'}${cuposTexto}`.trim(),
+          disabled: !tieneCupos // Marcar como deshabilitado si no tiene cupos
+        };
+      });
     };
 
     const baseFields = [
@@ -947,7 +967,12 @@ const Reservacion = () => {
         defaultValue: today,
         getInitialValue: () => getInitialValue('h_fecha', today),
         disabled: modalMode === 'view', // Solo deshabilitar en VIEW, no en EDIT
-        min: today
+        min: today,
+        onChange: (newFecha) => {
+          // Actualizar current para que el useEffect detecte el cambio
+          console.log('📅 Fecha cambiada a:', newFecha);
+          setCurrent(prev => ({ ...prev, h_fecha: newFecha, horarioid: '' }));
+        }
       },
       {
         name: 'parroquiaid',
@@ -961,7 +986,12 @@ const Reservacion = () => {
           }))
         ],
         getInitialValue: () => getInitialValue('parroquiaid', ''),
-        disabled: modalMode === 'view' // Solo deshabilitar en VIEW, no en EDIT
+        disabled: modalMode === 'view', // Solo deshabilitar en VIEW, no en EDIT
+        onChange: (newParroquiaId, allValues) => {
+          // Solo actualizar current - el useEffect se encargará de llamar loadHorarios
+          console.log('🔄 Parroquia cambiada a:', newParroquiaId);
+          setCurrent(prev => ({ ...prev, parroquiaid: newParroquiaId, horarioid: '' }));
+        }
       },
       {
         name: 'horarioid',
@@ -1021,7 +1051,12 @@ const Reservacion = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
                 {opciones.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
+                  <option
+                    key={opt.value}
+                    value={opt.value}
+                    disabled={opt.disabled}
+                    style={opt.disabled ? { color: '#999', fontStyle: 'italic' } : undefined}
+                  >
                     {opt.label}
                   </option>
                 ))}
@@ -1039,15 +1074,31 @@ const Reservacion = () => {
                 </p>
               )}
               {parroquiaId && fecha && opciones.length === 1 && !disabled && (
-                <p className="text-xs text-red-600 mt-1">
-                  ❌ No hay horarios disponibles para esta parroquia y fecha
+                <p className="text-xs text-red-600 mt-1 font-medium">
+                  ❌ No hay horarios programados para esta fecha y parroquia
                 </p>
               )}
-              {parroquiaId && fecha && opciones.length > 1 && !disabled && modalMode === 'edit' && (
-                <p className="text-xs text-green-600 mt-1">
-                  ✅ {opciones.length - 1} horario(s) disponible(s)
-                </p>
-              )}
+              {parroquiaId && fecha && opciones.length > 1 && !disabled && (() => {
+                const conCupos = opciones.filter(o => !o.disabled).length - 1; // -1 por la opción "Seleccione"
+                const sinCupos = opciones.filter(o => o.disabled).length;
+                const total = opciones.length - 1; // -1 por la opción "Seleccione"
+
+                if (conCupos === 0 && sinCupos > 0) {
+                  return (
+                    <p className="text-xs text-red-600 mt-1 font-medium">
+                      ❌ {total} horario(s) encontrado(s) pero todos están completos
+                    </p>
+                  );
+                } else if (conCupos > 0) {
+                  return (
+                    <p className="text-xs text-green-600 mt-1 font-medium">
+                      ✅ {conCupos} horario(s) con cupos disponibles
+                      {sinCupos > 0 && <span className="text-gray-600"> ({sinCupos} completo{sinCupos > 1 ? 's' : ''})</span>}
+                    </p>
+                  );
+                }
+                return null;
+              })()}
             </div>
           );
         }
@@ -1070,10 +1121,10 @@ const Reservacion = () => {
         disabled: modalMode === 'view',
         rows: 3
       },
-      { // Campo de estado de pago editable (para edición y vista)
+      {
         name: 'pago_estado',
-        label: 'Estado',
-        type: 'combobox',
+        label: 'Estado del Pago',
+        type: 'select',
         options: [
           { value: 'pendiente', label: 'Pendiente' },
           { value: 'pagado', label: 'Pagado' },
@@ -1082,58 +1133,8 @@ const Reservacion = () => {
         ],
         placeholder: 'Seleccione estado',
         getInitialValue: () => getInitialValue('pago_estado', 'pendiente'),
-        disabled: modalMode === 'view'
-      },
-      {
-        name: 'estado_label',
-        label: 'Estado',
-        type: 'custom',
-        render: (value, setValue, allValues, disabled) => {
-          const estadoValue = (current?.pago_estado) || 'pendiente';
-
-          return (
-            <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">Estado</label>
-              <div className="flex items-center gap-3">
-                <span className={`inline-block px-3 py-2 text-sm font-medium rounded-lg ${estadoValue === 'pendiente'
-                  ? 'bg-yellow-100 text-yellow-700 border border-yellow-200'
-                  : estadoValue === 'pagado'
-                    ? 'bg-green-100 text-green-700 border border-green-200'
-                    : estadoValue === 'vencido'
-                      ? 'bg-orange-100 text-orange-700 border border-orange-200'
-                      : estadoValue === 'fallido'
-                        ? 'bg-red-100 text-red-700 border border-red-200'
-                        : 'bg-gray-100 text-gray-700 border border-gray-200'
-                  }`}>
-                  {estadoValue.charAt(0).toUpperCase() + estadoValue.slice(1)}
-                </span>
-
-                {modalMode === 'add' && estadoValue !== 'pagado' && (
-                  <motion.button
-                    onClick={() => {
-                      setPaymentModalOpen(true);
-                      setPaymentData({
-                        pago_medio: '',
-                        pago_monto: '',
-                        cardNumber: '',
-                        expiryDate: '',
-                        cvv: '',
-                        cardHolder: ''
-                      });
-                    }}
-                    className="px-3 py-2 text-white rounded-lg hover:brightness-110 text-sm w-full"
-                    style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                  >
-                    💳 Realizar Pago
-                  </motion.button>
-                )}
-              </div>
-            </div>
-          );
-        }
-      },
+        disabled: modalMode === 'view' // Ahora es editable en modo edit/add
+      }
     ];
 
     return baseFields;
@@ -1167,56 +1168,24 @@ const Reservacion = () => {
   const handleSubmit = async (values) => {
     console.log('🚀 [FRONTEND] handleSubmit iniciado');
     console.log('🚀 [FRONTEND] modalMode:', modalMode);
-    console.log('🚀 [FRONTEND] current:', current);
     console.log('🚀 [FRONTEND] values:', values);
 
     try {
       if (modalMode === 'add') {
         console.log('🚀 [FRONTEND] Modo agregar');
 
-        // Si hay datos de pago, enviar todo junto (reserva + pago)
-        if (current?.pago_data) {
-          console.log('🚀 [FRONTEND] ✅ Hay datos de pago, creando reserva con pago...');
+        // Preparar payload con datos de reserva y pago (si existen)
+        const payload = {
+          ...values,
+          horarioid: parseInt(values.horarioid),
+          // Asegurar que campos vacíos se envíen como null o string vacía según corresponda
+          pago_medio: values.pago_medio || null,
+          pago_monto: values.pago_monto || null,
+          pago_descripcion: values.pago_descripcion || null,
+          pago_estado: values.pago_estado || 'pendiente'
+        };
 
-          // Combinar datos de reserva y pago
-          const reservaConPago = {
-            // Datos de la reserva (formato que espera el backend)
-            "horarioid": parseInt(current.horarioid),
-            "persona_nombre": current.persona_nombre,
-            "res_descripcion": current.res_descripcion,
-            // Datos del pago
-            "pago_medio": current.pago_data.pago_medio,
-            "pago_monto": current.pago_data.pago_monto,
-            "pago_descripcion": current.pago_data.pago_descripcion,
-            "pago_fecha": current.pago_data.pago_fecha,
-            "pago_estado": current.pago_data.pago_estado
-          };
-
-          console.log('🚀 [FRONTEND] Enviando reserva con pago:', reservaConPago);
-
-          const result = await createItem(reservaConPago);
-
-          if (result.success) {
-            console.log('✅ [FRONTEND] Reserva con pago creada exitosamente');
-
-            // Limpiar datos después de crear exitosamente
-            setCurrent(prev => {
-              const newCurrent = { ...prev };
-              delete newCurrent.pago_data;
-              delete newCurrent.pago_estado;
-              delete newCurrent.estado_texto;
-              return newCurrent;
-            });
-
-            alert('✅ Reserva creada exitosamente');
-          }
-
-          return result;
-        } else {
-          console.log('🚀 [FRONTEND] No hay datos de pago, creando solo reserva');
-          // Crear solo reserva sin pago
-          return await createItem(values);
-        }
+        return await createItem(payload);
       }
 
       if (modalMode === 'edit') {
@@ -1225,7 +1194,12 @@ const Reservacion = () => {
         const payload = {
           horarioid: Number(values.horarioid || current?.horarioid),
           persona_nombre: (values.persona_nombre ?? current?.persona_nombre ?? current?.res_persona_nombre ?? '').trim(),
-          res_descripcion: (values.res_descripcion ?? current?.res_descripcion ?? '').trim()
+          res_descripcion: (values.res_descripcion ?? current?.res_descripcion ?? '').trim(),
+          // Incluir campos de pago para actualización
+          pago_medio: values.pago_medio || null,
+          pago_monto: values.pago_monto || null,
+          pago_descripcion: values.pago_descripcion || null,
+          pago_estado: values.pago_estado || null
         };
 
         return await updateItem(current?.reservaid || current?.id, payload);
@@ -1235,7 +1209,6 @@ const Reservacion = () => {
       return { success: false, error: 'Modo no soportado' };
     } catch (error) {
       console.error('❌ [FRONTEND] Error en handleSubmit:', error);
-      console.error('❌ [FRONTEND] Error stack:', error.stack);
       alert('❌ Error: ' + error.message);
       return { success: false, error: error.message };
     }
@@ -1315,7 +1288,6 @@ const Reservacion = () => {
               rowKey={(r) => r.id || r.reservaid}
               searchTerm={searchTerm}
               searchKeys={['acto_titulo', 'acto_nombre', 'persona_nombre', 'res_descripcion', 'estado_texto']}
-              itemsPerPage={7}
               striped
               headerSticky
               emptyText="No hay reservas"

@@ -7,7 +7,7 @@ import PageHeader from '../../components/Common/PageHeader';
 import Card from '../../components/Common/Card';
 import TablaConPaginacion from '../../components/Common/TablaConPaginacion';
 import ActionButton from '../../components/Common/ActionButton';
-import ModalCrudGenerico from '../../components/Modals/ModalCrudGenerico';
+import ModalActoLiturgico from '../../components/Modals/ModalActoLiturgico';
 import DialogoConfirmacion from '../../components/Common/DialogoConfirmacion';
 import useLiturgicalActs from '../../hooks/useLiturgicalActs';
 import { ACTO_NOMBRES } from '../../constants/liturgical';
@@ -47,8 +47,8 @@ const ActoLiturgico = () => {
   const location = useLocation();
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState('add'); // 'add' | 'edit' | 'view'
   const [current, setCurrent] = useState(null);
+  const [viewMode, setViewMode] = useState(false); // Nuevo estado
   const [searchTerm, setSearchTerm] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -79,8 +79,8 @@ const ActoLiturgico = () => {
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     if (searchParams.get('from') === 'calendar') {
-      // Aquí podrías, si quieres, leer otros params (fecha, parroquia, etc.) y pasarlos a openActoModal
-      openActoModal();
+      setCurrent(null);
+      setModalOpen(true);
 
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete('from');
@@ -108,43 +108,41 @@ const ActoLiturgico = () => {
   const columns = useMemo(() => {
     const canEdit = hasPermission('liturgico_actos_editar');
     const canDelete = hasPermission('liturgico_actos_eliminar');
-    const canViewDetail = hasPermission('liturgico_actos_ver');
+    const canViewDetail = true; // Todos pueden ver detalle si pueden listar
 
     return [
       {
-        key: 'acto',
-        header: 'Acto Litúrgico',
+        key: 'parroquia_nombre',
+        header: 'Parroquia',
         width: '20%',
         render: (r) => (
-          <div className="flex items-center gap-3 min-w-0">
-            <div
-              className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, var(--primary), var(--secondary))' }}
-            >
-              <span className="text-white text-sm font-bold">
-                {(labelByActo[r.act_nombre] || 'A').charAt(0)}
-              </span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-medium truncate" style={{ color: 'var(--text)' }}>
-                {r.act_titulo}
-              </p>
-              <p className="text-sm truncate" style={{ color: 'var(--muted)' }}>
-                {r.parroquia_nombre || ''}
-              </p>
-            </div>
+          <div className="flex items-center gap-2">
+            <Church className="w-4 h-4 text-blue-600" />
+            <span className="font-medium text-gray-900">{r.parroquia_nombre}</span>
           </div>
         ),
       },
       {
-        key: 'tipo',
-        header: 'Tipo',
-        width: '12%',
-        align: 'center',
+        key: 'act_nombre',
+        header: 'Tipo Acto',
+        width: '15%',
         render: (r) => (
-          <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+          <span className="text-sm font-medium text-gray-700">
             {labelByActo[r.act_nombre] || r.act_nombre}
           </span>
+        ),
+      },
+      {
+        key: 'act_titulo',
+        header: 'Título',
+        width: '20%',
+        render: (r) => (
+          <div className="flex flex-col">
+            <span className="font-medium text-gray-900">{r.act_titulo}</span>
+            <span className="text-xs text-gray-500">
+              {r.h_fecha} {r.h_hora}
+            </span>
+          </div>
         ),
       },
       {
@@ -162,20 +160,21 @@ const ActoLiturgico = () => {
         ),
       },
       {
-        key: 'descripcion',
-        header: 'Descripción',
-        width: '28%',
+        key: 'max_reservas',
+        header: 'Máx. Reservas',
+        width: '10%',
+        align: 'center',
         render: (r) => (
-          <span className="text-sm truncate" style={{ color: 'var(--text)' }}>
-            {r.act_descripcion || 'Sin descripción'}
+          <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+            {r.act_max_reservas ? r.act_max_reservas : '∞'}
           </span>
         ),
       },
       buildActionColumn({
         onEdit: canEdit
           ? (row) => {
+            setViewMode(false);
             setCurrent(row);
-            setModalMode('edit');
             setModalOpen(true);
           }
           : null,
@@ -183,8 +182,8 @@ const ActoLiturgico = () => {
         onView: canViewDetail
           ? (row) => {
             console.log('[ActoLiturgico] Ver más row:', row);
+            setViewMode(true);
             setCurrent(row);
-            setModalMode('view');
             setModalOpen(true);
           }
           : null,
@@ -192,129 +191,6 @@ const ActoLiturgico = () => {
       }),
     ];
   }, [hasPermission, labelByActo]);
-
-  // Campos del formulario del modal
-  const fields = useMemo(() => {
-    let parroquiaFieldOptions = [{ value: '', label: 'Seleccione' }, ...parroquiaOptions];
-    let parroquiaDisabled = false;
-    let parroquiaGetInitial = null;
-
-    if (!isAdmin && userParroquiaId) {
-      const ownOpt = parroquiaOptions.find(o => o.value === userParroquiaId);
-      parroquiaFieldOptions = ownOpt ? [ownOpt] : [];
-      parroquiaDisabled = true;
-      parroquiaGetInitial = () => userParroquiaId;
-    }
-
-    const baseFields = [
-      {
-        name: 'parroquiaid',
-        label: 'Parroquia',
-        type: 'select',
-        options: parroquiaFieldOptions,
-        disabled: parroquiaDisabled,
-        ...(parroquiaGetInitial ? { getInitialValue: parroquiaGetInitial } : {}),
-      },
-      {
-        name: 'act_nombre',
-        label: 'Acto Litúrgico',
-        type: 'select',
-        options: [{ value: '', label: 'Seleccione' }, ...ACTO_NOMBRES],
-      },
-      {
-        name: 'act_titulo',
-        label: 'Título',
-        type: 'text',
-        placeholder: 'Ej. Misa dominical',
-      },
-      {
-        name: 'act_descripcion',
-        label: 'Descripción',
-        type: 'textarea',
-        placeholder: 'Observaciones',
-      },
-      { name: 'h_fecha', label: 'Fecha inicial', type: 'date', placeholder: 'YYYY-MM-DD' },
-      { name: 'h_hora', label: 'Hora inicial', type: 'time', placeholder: 'HH:MM' },
-      { name: 'h_fecha_fin', label: 'Fecha final', type: 'date', placeholder: 'YYYY-MM-DD' },
-      { name: 'h_hora_fin', label: 'Hora final', type: 'time', placeholder: 'HH:MM' },
-    ];
-
-    if (modalMode === 'edit') {
-      baseFields.push({ name: 'act_estado', label: 'Activo', type: 'checkbox' });
-    }
-
-    return baseFields;
-  }, [parroquiaOptions, modalMode, isAdmin, userParroquiaId]);
-
-  const validate = (v) => {
-    if (!v.parroquiaid) return 'Seleccione la parroquia';
-    if (!v.act_nombre) return 'Seleccione el acto';
-    if (!v.act_titulo || !v.act_titulo.trim()) return 'Ingrese el título';
-    if (!v.h_fecha) return 'Ingrese la fecha inicial';
-    if (!v.h_hora) return 'Ingrese la hora inicial';
-    const defaults = deriveEndDateTime(v.h_fecha, v.h_hora);
-    const fechaFin = v.h_fecha_fin || defaults.date;
-    const horaFin = v.h_hora_fin || defaults.time;
-
-    try {
-      const inicio = new Date(`${v.h_fecha}T${v.h_hora}:00`);
-      const fin = new Date(`${fechaFin}T${horaFin}:00`);
-      if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
-        return 'Fechas u horas inválidas';
-      }
-      if (fin < inicio) {
-        return 'La fecha/hora final debe ser mayor o igual a la inicial';
-      }
-    } catch {
-      return 'Fechas u horas inválidas';
-    }
-
-    return '';
-  };
-
-
-
-  const handleSubmit = async (values) => {
-    try {
-      const payload = { ...values };
-      const defaults = deriveEndDateTime(payload.h_fecha, payload.h_hora);
-      payload.h_fecha_fin = payload.h_fecha_fin || defaults.date;
-      payload.h_hora_fin = payload.h_hora_fin || defaults.time;
-
-      if (payload.parroquiaid !== '' && payload.parroquiaid !== undefined) {
-        payload.parroquiaid = Number(payload.parroquiaid);
-      }
-
-      if (modalMode === 'add') {
-        payload.act_estado = true;
-      }
-
-      const response = await fetch('http://localhost:5000/api/liturgical/actos-con-horario', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Error ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        list && list();
-        return { success: true, message: data.message };
-      }
-
-      throw new Error(data.error || 'Error desconocido');
-    } catch (error) {
-      console.error('Error creando acto con horario:', error);
-      return { success: false, error: error.message };
-    }
-  };
 
   const handleDelete = (row) => {
     setDeleteTarget(row.id || row.actoliturgicoid);
@@ -379,8 +255,7 @@ const ActoLiturgico = () => {
         {hasPermission('liturgico_actos_crear') && (
           <motion.button
             onClick={() => {
-              setCurrent({ act_estado: true });
-              setModalMode('add');
+              setCurrent(null);
               setModalOpen(true);
             }}
             className="text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110"
@@ -419,30 +294,28 @@ const ActoLiturgico = () => {
           rowKey={(r) => r.id || r.actoliturgicoid}
           searchTerm={searchTerm}
           searchKeys={['parroquia_nombre', 'act_nombre', 'act_titulo']}
-          itemsPerPage={7}
           striped
           headerSticky
           emptyText="No hay actos litúrgicos"
         />
       </Card>
 
-      <ModalCrudGenerico
+      <ModalActoLiturgico
         isOpen={modalOpen}
-        mode={modalMode}
-        title={
-          modalMode === 'add'
-            ? 'Nuevo Acto Litúrgico'
-            : modalMode === 'edit'
-              ? 'Editar Acto Litúrgico'
-              : 'Detalle del Acto'
-        }
-        icon={Church}
-        initialValues={current || { act_estado: true }}
-        fields={fields}
-        validate={validate}
-        onSubmit={handleSubmit}
-        onClose={() => setModalOpen(false)}
-        size="xl"
+        onClose={() => {
+          setModalOpen(false);
+          setCurrent(null);
+          setViewMode(false);
+        }}
+        initialValues={current || {}}
+        readOnly={viewMode}
+        onCreated={(data) => {
+          console.log('Acto creado/actualizado:', data);
+          list && list();
+          setModalOpen(false);
+          setCurrent(null);
+          setViewMode(false);
+        }}
       />
 
       <DialogoConfirmacion

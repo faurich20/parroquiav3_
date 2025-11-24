@@ -145,7 +145,8 @@ CREATE TABLE IF NOT EXISTS public.actoliturgico (
   act_descripcion  TEXT,
   act_estado       BOOLEAN NOT NULL DEFAULT TRUE,
   created_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-  updated_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+  updated_at       TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+  act_max_reservas INTEGER NOT NULL DEFAULT 0
 );
 
 -- Horarios de actos litúrgicos
@@ -396,6 +397,16 @@ BEGIN
     FOR EACH ROW
     EXECUTE FUNCTION set_updated_at();
   END IF;
+
+  -- Trigger para parroquia
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger WHERE tgname = 'trg_parroquia_set_updated_at'
+  ) THEN
+    CREATE TRIGGER trg_parroquia_set_updated_at
+    BEFORE UPDATE ON public.parroquia
+    FOR EACH ROW
+    EXECUTE FUNCTION set_updated_at();
+  END IF;
 END$$;
 
 -- =========================================================
@@ -450,8 +461,11 @@ $$ LANGUAGE plpgsql;
 -- =========================================================
 -- 11) CONSULTAS ÚTILES PARA REPORTES Y DEBUGGING
 -- =========================================================
+-- NOTA: Estas son consultas de ejemplo para documentación.
+-- No se ejecutan automáticamente al crear la base de datos.
 
 -- Consulta completa para obtener actos litúrgicos con sus horarios
+/*
 SELECT
   a.actoliturgicoid,
   a.parroquiaid,
@@ -460,6 +474,7 @@ SELECT
   a.act_titulo,
   a.act_descripcion,
   a.act_estado,
+  a.act_max_reservas,
   a.created_at,
   a.updated_at,
   h.horarioid,
@@ -470,8 +485,10 @@ LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
 LEFT JOIN public.horario h ON a.actoliturgicoid = h.actoliturgicoid
 WHERE a.act_estado = TRUE
 ORDER BY a.actoliturgicoid, h.h_fecha, h.h_hora;
+*/
 
 -- Consulta para obtener reservas con información completa
+/*
 SELECT
   r.reservaid,
   r.horarioid,
@@ -486,6 +503,7 @@ SELECT
   h.h_hora,
   a.act_nombre,
   a.act_titulo,
+  a.act_max_reservas,
   p.par_nombre as parroquia_nombre,
   -- Información del pago
   pg.pago_medio,
@@ -504,16 +522,21 @@ SELECT
     ELSE 'Estado desconocido'
   END as estado_texto,
   -- Información de persona
-  per.per_nombres || ' ' || per.per_apellidos as persona_nombre
+  per.per_nombres || ' ' || per.per_apellidos as persona_nombre,
+  -- Cupos disponibles para este horario
+  (a.act_max_reservas - COUNT(r2.reservaid) OVER (PARTITION BY h.horarioid)) as cupos_disponibles
 FROM public.reserva r
 LEFT JOIN public.horario h ON r.horarioid = h.horarioid
-LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
+LEFT JOIN public.actoliturgico a ON h.actoliturgicoid =a.actoliturgicoid
 LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
 LEFT JOIN public.pago pg ON r.pagoid = pg.pagoid
 LEFT JOIN public.persona per ON r.personaid = per.personaid
+LEFT JOIN public.reserva r2 ON h.horarioid = r2.horarioid
 ORDER BY h.h_fecha DESC, h.h_hora DESC;
+*/
 
 -- Consulta para pagos pendientes de expirar
+/*
 SELECT
   pg.pagoid,
   pg.pago_medio,
@@ -536,28 +559,35 @@ LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
 WHERE pg.pago_estado = 'pendiente'
   AND pg.pago_expira > NOW()
 ORDER BY pg.pago_expira ASC;
+*/
 
 -- Consulta para obtener actos litúrgicos disponibles (para crear horarios)
+/*
 SELECT
   actoliturgicoid,
   act_nombre,
   act_titulo,
   act_descripcion,
+  act_max_reservas,
   p.par_nombre as parroquia_nombre
 FROM public.actoliturgico a
 LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
 WHERE a.act_estado = TRUE
 ORDER BY a.act_nombre, a.act_titulo;
+*/
 
--- Consulta para obtener horarios por fecha específica (ejemplo para mañana)
+-- Consulta para obtener horarios por fecha específica con cupos disponibles
+/*
 SELECT
   h.horarioid,
   h.h_fecha,
   h.h_hora,
   a.act_nombre,
   a.act_titulo,
+  a.act_max_reservas,
   p.par_nombre as parroquia_nombre,
   COUNT(r.reservaid) as reservas_total,
+  (a.act_max_reservas - COUNT(r.reservaid)) as cupos_disponibles,
   COUNT(CASE WHEN COALESCE(pg.pago_estado, 'pendiente') IN ('pendiente', 'pagado') THEN 1 END) as reservas_activas
 FROM public.horario h
 LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
@@ -565,12 +595,16 @@ LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
 LEFT JOIN public.reserva r ON h.horarioid = r.horarioid
 LEFT JOIN public.pago pg ON r.pagoid = pg.pagoid
 WHERE h.h_fecha = CURRENT_DATE + INTERVAL '1 day' -- Ejemplo: horarios para mañana
-GROUP BY h.horarioid, h.h_fecha, h.h_hora, a.act_nombre, a.act_titulo, p.par_nombre
+GROUP BY h.horarioid, h.h_fecha, h.h_hora, a.act_nombre, a.act_titulo, a.act_max_reservas, p.par_nombre
+HAVING (a.act_max_reservas - COUNT(r.reservaid)) > 0 -- Solo horarios con cupos disponibles
 ORDER BY h.h_hora;
+*/
 
 -- Consulta para obtener estadísticas de actos litúrgicos
+/*
 SELECT
   a.act_nombre,
+  a.act_max_reservas,
   COUNT(h.horarioid) as total_horarios,
   COUNT(r.reservaid) as total_reservas,
   COUNT(CASE WHEN COALESCE(pg.pago_estado, 'pendiente') IN ('pendiente', 'pagado') THEN 1 END) as reservas_activas,
@@ -580,17 +614,21 @@ LEFT JOIN public.horario h ON a.actoliturgicoid = h.actoliturgicoid
 LEFT JOIN public.reserva r ON h.horarioid = r.horarioid
 LEFT JOIN public.pago pg ON r.pagoid = pg.pagoid
 WHERE a.act_estado = TRUE
-GROUP BY a.act_nombre
+GROUP BY a.act_nombre, a.act_max_reservas
 ORDER BY total_horarios DESC;
+*/
 
--- Consulta para calendario de actos litúrgicos (próximos 30 días)
+-- Consulta para calendario de actos litúrgicos (próximos 30 días) con cupos
+/*
 SELECT
   h.h_fecha,
   h.h_hora,
   a.act_nombre,
   a.act_titulo,
+  a.act_max_reservas,
   p.par_nombre as parroquia_nombre,
   COUNT(r.reservaid) as reservas_count,
+  (a.act_max_reservas - COUNT(r.reservaid)) as cupos_disponibles,
   COUNT(CASE WHEN COALESCE(pg.pago_estado, 'pendiente') IN ('pendiente', 'pagado') THEN 1 END) as reservas_activas_count,
   h.horarioid,
   a.actoliturgicoid
@@ -601,8 +639,9 @@ LEFT JOIN public.reserva r ON h.horarioid = r.horarioid
 LEFT JOIN public.pago pg ON r.pagoid = pg.pagoid
 WHERE h.h_fecha >= CURRENT_DATE
   AND h.h_fecha < CURRENT_DATE + INTERVAL '30 days'
-GROUP BY h.h_fecha, h.h_hora, a.act_nombre, a.act_titulo, p.par_nombre, h.horarioid, a.actoliturgicoid
+GROUP BY h.h_fecha, h.h_hora, a.act_nombre, a.act_titulo, a.act_max_reservas, p.par_nombre, h.horarioid, a.actoliturgicoid
 ORDER BY h.h_fecha, h.h_hora;
+*/
 
 -- =========================================================
 -- 12) NOTAS IMPORTANTES SOBRE EL ESQUEMA

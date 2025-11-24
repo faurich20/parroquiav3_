@@ -145,12 +145,19 @@ const ModalCrudGenerico = ({
               type={campo.type}
               value={value || ''}
               onChange={(e) => {
-                setValue(e.target.value);
+                const newValue = e.target.value;
+                setValue(newValue);
                 fields.forEach(f => {
                   if (f.dependsOn && values[f.dependsOn]) {
                     setValues(prev => ({ ...prev, [f.name]: '' }));
                   }
                 });
+
+                // Ejecutar callback onChange personalizado si existe
+                if (typeof campo.onChange === 'function') {
+                  const updatedValues = { ...values, [campo.name]: newValue };
+                  campo.onChange(newValue, updatedValues);
+                }
               }}
               placeholder={campo.placeholder}
               disabled={disabled}
@@ -219,6 +226,12 @@ const ModalCrudGenerico = ({
                 });
 
                 setRenderTrigger(prev => prev + 1);
+
+                // Ejecutar callback onChange personalizado si existe
+                if (typeof campo.onChange === 'function') {
+                  const updatedValues = { ...values, [campo.name]: newValue };
+                  campo.onChange(newValue, updatedValues);
+                }
               }}
               disabled={disabled || (campo.dependsOn && (() => {
                 const dependsOnArray = Array.isArray(campo.dependsOn) ? campo.dependsOn : [campo.dependsOn];
@@ -289,14 +302,14 @@ const ModalCrudGenerico = ({
         {errores ? (
           <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">{errores}</div>
         ) : null}
-        {soloLectura && typeof readOnlyContent === 'function' ? (        
-          <div className="space-y-4">{readOnlyContent(values)}</div>         
-        ) : (        
+        {soloLectura && typeof readOnlyContent === 'function' ? (
+          <div className="space-y-4">{readOnlyContent(values)}</div>
+        ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* ✅ FIX: Ahora cada campo tiene su key única */}
             {fields.map((f) => renderCampo(f))}
             {console.log('[ModalCrudGenerico] valores solo lectura:', values)}
-          </div>      
+          </div>
         )}
         {console.log('[ModalCrudGenerico] valores solo lectura:', values)}
       </div>

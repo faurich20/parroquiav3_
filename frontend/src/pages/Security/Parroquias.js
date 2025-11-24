@@ -66,7 +66,7 @@ const ParroquiasPage = () => {
           const data = await resp.json();
           if (mounted) setDepartamentos((data.departamentos || []).map(d => ({ value: d.departamentoid, label: d.dep_nombre })));
         }
-      } catch {}
+      } catch { }
     })();
     return () => { mounted = false; };
   }, [authFetch]);
@@ -86,7 +86,7 @@ const ParroquiasPage = () => {
             setDistritos([]);
           }
         }
-      } catch {}
+      } catch { }
     })();
     return () => { mounted = false; };
   }, [authFetch, selDepartamento]);
@@ -102,7 +102,7 @@ const ParroquiasPage = () => {
           const data = await resp.json();
           if (mounted) setDistritos((data.distritos || []).map(d => ({ value: d.distritoid, label: d.dis_nombre })));
         }
-      } catch {}
+      } catch { }
     })();
     return () => { mounted = false; };
   }, [authFetch, selProvincia]);
@@ -142,7 +142,7 @@ const ParroquiasPage = () => {
           setSelProvincia('');
           setDistritos([]);
         }
-      } catch {}
+      } catch { }
     })();
     return () => { mounted = false; };
   }, [isModalOpen, modalMode, current, authFetch]);
@@ -161,9 +161,11 @@ const ParroquiasPage = () => {
         </div>
       )
     },
-    { key: 'telefono', header: 'Teléfonos', width: '16%', render: (r) => (
-      <span>{r.par_telefono1}{r.par_telefono2 ? ` / ${r.par_telefono2}` : ''}</span>
-    ) },
+    {
+      key: 'telefono', header: 'Teléfonos', width: '16%', render: (r) => (
+        <span>{r.par_telefono1}{r.par_telefono2 ? ` / ${r.par_telefono2}` : ''}</span>
+      )
+    },
     { key: 'departamento', header: 'Departamento', width: '10%', align: 'center', render: (r) => r.dep_nombre || '-' },
     { key: 'provincia', header: 'Provincia', width: '10%', align: 'center', render: (r) => r.prov_nombre || '-' },
     { key: 'distrito', header: 'Distrito', width: '10%', align: 'center', render: (r) => r.dis_nombre || '-' },
@@ -374,7 +376,6 @@ const ParroquiasPage = () => {
           rowKey={(r) => r.parroquiaid}
           searchTerm={searchTerm}
           searchKeys={['par_nombre', 'par_direccion', 'par_telefono1', 'dep_nombre', 'prov_nombre', 'dis_nombre']}
-          itemsPerPage={7}
           hover
           striped
           emptyText="No hay parroquias"
@@ -391,7 +392,7 @@ const ParroquiasPage = () => {
         validate={validate}
         onSubmit={handleSubmit}
         onClose={() => setIsModalOpen(false)}
-        size="xl"       
+        size="xl"
         readOnlyContent={(vals) => {
           const nombre = vals?.par_nombre || current?.par_nombre || '';
           const direccion = vals?.par_direccion || current?.par_direccion || '';

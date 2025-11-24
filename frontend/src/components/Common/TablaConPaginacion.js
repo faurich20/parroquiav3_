@@ -1,6 +1,7 @@
 // src/components/Common/TablaConPaginacion.js
 import React, { useMemo, useState, useEffect } from 'react';
 import TablaBase from './TablaBase';
+import useResponsiveTableRows from '../../hooks/useResponsiveTableRows';
 
 /**
  * TablaConPaginacion: tabla con paginación integrada y controles completos.
@@ -20,7 +21,7 @@ const TablaConPaginacion = ({
   rowKey,
   searchTerm = '',
   searchKeys = [],
-  itemsPerPage = 7,
+  itemsPerPage: itemsPerPageProp,
   className = '',
   style = {},
   headerSticky = false,
@@ -30,6 +31,13 @@ const TablaConPaginacion = ({
   showPagination = true,
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Calcular filas dinámicamente basado en la resolución de pantalla
+  // Si se proporciona itemsPerPageProp, se usa como valor por defecto
+  const responsiveRows = useResponsiveTableRows(itemsPerPageProp || 7, 60, 500);
+
+  // Usar itemsPerPageProp si se proporciona, sino usar el cálculo responsivo
+  const itemsPerPage = itemsPerPageProp || responsiveRows;
 
   // Filtrar datos basado en searchTerm y searchKeys
   const filteredData = useMemo(() => {

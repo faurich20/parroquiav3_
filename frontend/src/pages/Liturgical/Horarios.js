@@ -197,7 +197,7 @@ const Horarios = () => {
           gap: 0.75rem;
         }
         .horarios-calendar .rbc-month-row {
-          min-height: 70px;
+          min-height: 50px;
         }
         .horarios-calendar .rbc-month-view {
           font-size: 0.9rem;
@@ -416,18 +416,6 @@ const Horarios = () => {
     }
   }, [loadHorarios]);
 
-  // Cargar horarios cuando cambian parroquia/fecha en el modal
-  useEffect(() => {
-    if (!reservaModalOpen) return;
-    const parroquiaId = reservaData?.parroquiaid;
-    const fecha = reservaData?.h_fecha;
-    if (parroquiaId && fecha) {
-      loadHorarios(parroquiaId, fecha);
-    } else {
-      loadHorarios();
-    }
-  }, [reservaModalOpen, reservaData?.parroquiaid, reservaData?.h_fecha, loadHorarios]);
-
   // Recargar calendario cuando el usuario vuelve a estar autenticado
   useEffect(() => {
     if (user && refetch) {
@@ -486,8 +474,11 @@ const Horarios = () => {
                 location: h.parroquia_nombre || h.par_nombre || 'Sin ubicación',
                 type: h.acto_nombre || h.act_nombre || h.acto_tipo || h.type || 'misa',
                 allDay: false,
-                reservas_count: h.reservas_count || 0,
+                reservas_count: h.reservas_count || h.reservas_total || 0,
+                reservas_total: h.reservas_total || h.reservas_count || 0,
                 reservas_activas_count: h.reservas_activas_count || 0,
+                act_max_reservas: h.act_max_reservas || null,
+                disponibles: h.disponibles !== undefined ? h.disponibles : null,
                 raw: h,
               };
             } catch (err) {
@@ -522,8 +513,11 @@ const Horarios = () => {
                 // Intentar obtener el tipo desde acto/act_nombre antes de usar el tipo genérico
                 type: event.type || event.acto_nombre || event.acto_titulo || event.acto_tipo || 'misa',
                 allDay: false,
-                reservas_count: event.reservas_count || 0,
+                reservas_count: event.reservas_count || event.reservas_total || 0,
+                reservas_total: event.reservas_total || event.reservas_count || 0,
                 reservas_activas_count: event.reservas_activas_count || 0,
+                act_max_reservas: event.act_max_reservas || null,
+                disponibles: event.disponibles !== undefined ? event.disponibles : null,
                 raw: event
               };
             } catch (err) {
@@ -565,8 +559,11 @@ const Horarios = () => {
             location: event.location || 'Sin ubicación',
             type: event.type || 'misa',
             allDay: false,
-            reservas_count: event.reservas_count || 0,
+            reservas_count: event.reservas_count || event.reservas_total || 0,
+            reservas_total: event.reservas_total || event.reservas_count || 0,
             reservas_activas_count: event.reservas_activas_count || 0,
+            act_max_reservas: event.act_max_reservas || null,
+            disponibles: event.disponibles !== undefined ? event.disponibles : null,
             actoliturgicoid: event.actoliturgicoid,
             raw: event,
           };
@@ -578,21 +575,44 @@ const Horarios = () => {
       .filter(Boolean);
   }, [items, horarios, selectedParroquia]);
 
-  // Estilos personalizados para los eventos según su tipo
+  // Estilos personalizados para los eventos según su tipo y disponibilidad
   const eventStyleGetter = (event) => {
     const liturgicalType = LITURGICAL_TYPES[event.type];
     const backgroundColor = liturgicalType ? liturgicalType.color : '#3b82f6';
+
+    // Verificar si no hay cupos disponibles usando disponibles directo o calculando
+    const disponibles = event.disponibles !== undefined && event.disponibles !== null
+      ? event.disponibles
+      : null;
+
+    const maxReservas = event.act_max_reservas || event.raw?.act_max_reservas;
+    const reservasActuales = event.reservas_total || event.reservas_count || event.raw?.reservas_total || 0;
+
+    // Un horario está sin cupos si disponibles === 0, o si las reservas >= max
+    const sinCupos = disponibles !== null
+      ? disponibles === 0
+      : (maxReservas && maxReservas > 0 && reservasActuales >= maxReservas);
+
+    console.log('🎨 Event Style:', {
+      title: event.title,
+      maxReservas,
+      reservasActuales,
+      disponibles,
+      sinCupos,
+      colorTexto: sinCupos ? 'rojo' : 'blanco'
+    });
+
     return {
       style: {
         backgroundColor,
         borderRadius: '5px',
         opacity: 0.9,
-        color: 'white',
+        color: sinCupos ? '#ff0000' : 'white',  // Texto rojo si no hay cupos, blanco si hay
         border: 'none',
         display: 'block',
         padding: '4px 8px',
         fontSize: '0.875rem',
-        fontWeight: '500',
+        fontWeight: sinCupos ? '700' : '500',  // Bold cuando no hay cupos
         boxShadow: '0 1px 3px rgba(0,0,0,0.12)'
       }
     };
@@ -866,12 +886,6 @@ const Horarios = () => {
       }
 
       if (!payload || !payload.dateStr) return;
-
-      const finished = isEventFinished(payload.dateStr, payload.endDateStr, payload.hasExplicitEnd);
-      if (finished) {
-        console.log('[Horarios] Evento finalizado, no se abre modal', payload);
-        return;
-      }
 
       console.log('[Horarios] handleSelectEvent payload', payload);
       openReservationModal(payload);
@@ -1467,7 +1481,7 @@ const Horarios = () => {
       </PageHeader>
 
       {/* Mapa de parroquias */}
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.6fr)_minmax(0,1.0fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.6fr)_minmax(0,0.9fr)]">
         <Card className="p-0 overflow-hidden">
           <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: 'var(--border)' }}>
             <div>
@@ -1478,7 +1492,7 @@ const Horarios = () => {
               {Object.keys(parroquiasCoords).length || 0} parroquia(s)
             </span>
           </div>
-          <div className="h-[500px] w-full">
+          <div className="h-[450px] w-full">
             {Object.keys(parroquiasCoords).length ? (
               <MapContainer
                 key={mapKey}
@@ -1539,56 +1553,64 @@ const Horarios = () => {
 
           {/* Calendario */}
           <Card className="p-5">
-            <div className="min-h-[400px] w-full">
+            <div className="h-[400px] w-full overflow-hidden">
               {events.length === 0 ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center max-w-md">
                     <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-300" />
                     <h3 className="text-lg font-semibold text-gray-700 mb-2">No hay actos litúrgicos programados</h3>
                     <p className="text-gray-500 mb-6">
-                      No hay horarios programados en el rango visible. Realiza tu primera reserva para comenzar.
+                      No hay horarios programados en el rango visible. Agrega tu primer acto litúrgico para comenzar.
                     </p>
                     <motion.button
-                      onClick={() => navigate('/liturgico/reservas?from=calendar')}
+                      onClick={() => openActoLiturgicoModal({
+                        dateStr: format(new Date(), 'yyyy-MM-dd'),
+                        timeStr: '',
+                        parroquiaid: selectedParroquia || '',
+                        actoNombre: '',
+                        actoTitulo: ''
+                      })}
                       className="text-white px-5 py-2.5 rounded-lg font-medium flex items-center gap-2 mx-auto transition-all hover:brightness-110 shadow-md"
                       style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' }}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                     >
                       <Calendar className="w-5 h-5" />
-                      Realizar Primera Reserva
+                      Agrega tu primer acto litúrgico
                     </motion.button>
                   </div>
                 </div>
               ) : (
-                <BigCalendar
-                  className="horarios-calendar"
-                  localizer={localizer}
-                  events={events}
-                  startAccessor="start"
-                  endAccessor="end"
-                  style={{ height: '100%' }}
-                  view={view}
-                  onView={setView}
-                  date={date}
-                  onNavigate={setDate}
-                  defaultView="month"
-                  views={['month', 'week', 'day', 'agenda']}
-                  messages={customMessages}
-                  eventPropGetter={eventStyleGetter}
-                  components={{ event: EventComponent, toolbar: CustomToolbar }}
-                  selectable
-                  onSelectSlot={handleSelectSlot}
-                  onSelectEvent={handleSelectEvent}
-                  culture="es"
-                  formats={customFormats}
-                  popup
-                  popupOffset={{ x: 0, y: 5 }}
-                  step={30}
-                  timeslots={2}
-                  min={new Date(2024, 0, 1, 6, 0, 0)}
-                  max={new Date(2024, 0, 1, 22, 0, 0)}
-                />
+                <div style={{ height: '380px', overflow: 'hidden' }}>
+                  <BigCalendar
+                    className="horarios-calendar"
+                    localizer={localizer}
+                    events={events}
+                    startAccessor="start"
+                    endAccessor="end"
+                    style={{ height: '380px' }}
+                    view={view}
+                    onView={setView}
+                    date={date}
+                    onNavigate={setDate}
+                    defaultView="month"
+                    views={['month', 'week', 'day', 'agenda']}
+                    messages={customMessages}
+                    eventPropGetter={eventStyleGetter}
+                    components={{ event: EventComponent, toolbar: CustomToolbar }}
+                    selectable
+                    onSelectSlot={handleSelectSlot}
+                    onSelectEvent={handleSelectEvent}
+                    culture="es"
+                    formats={customFormats}
+                    popup
+                    popupOffset={{ x: 0, y: 5 }}
+                    step={30}
+                    timeslots={2}
+                    min={new Date(2024, 0, 1, 6, 0, 0)}
+                    max={new Date(2024, 0, 1, 22, 0, 0)}
+                  />
+                </div>
               )}
             </div>
           </Card>

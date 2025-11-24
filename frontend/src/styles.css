@@ -212,3 +212,22 @@ body.modal-open {
 .rbc-event-content {
   font-size: 0.875rem !important;
 }
+
+/* Forzar altura del calendario */
+.horarios-calendar {
+  height: 380px !important;
+  max-height: 380px !important;
+}
+
+.horarios-calendar .rbc-calendar {
+  height: 380px !important;
+  max-height: 380px !important;
+}
+
+.horarios-calendar .rbc-month-view,
+.horarios-calendar .rbc-time-view,
+.horarios-calendar .rbc-agenda-view {
+  height: calc(380px - 60px) !important;
+  /* Restar altura del toolbar */
+  max-height: calc(380px - 60px) !important;
+}

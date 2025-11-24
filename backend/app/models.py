@@ -221,6 +221,7 @@ class ActoLiturgico(db.Model):
     act_titulo = db.Column(db.String(200), nullable=False)  # ej. Misa Dominical, Misa Señor de los Milagros
     act_descripcion = db.Column(db.Text)
     act_estado = db.Column(db.Boolean, default=True)
+    act_max_reservas = db.Column(db.Integer, nullable=True)  # Máximo de reservas permitidas (NULL = sin límite)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -236,6 +237,7 @@ class ActoLiturgico(db.Model):
             'act_titulo': self.act_titulo,
             'act_descripcion': self.act_descripcion,
             'act_estado': self.act_estado,
+            'act_max_reservas': self.act_max_reservas,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

@@ -63,6 +63,7 @@ const ModalActoLiturgico = ({
   onClose,
   initialValues = {},
   onCreated, // opcional: para que Horarios pueda hacer refetch del calendario
+  readOnly = false,
 }) => {
   const { authFetch, user } = useAuth();
 
@@ -73,6 +74,8 @@ const ModalActoLiturgico = ({
   const [parroquiaOptions, setParroquiaOptions] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [limitarReservas, setLimitarReservas] = useState(false);
+
   const [values, setValues] = useState({
     parroquiaid: '',
     act_nombre: '',
@@ -83,6 +86,7 @@ const ModalActoLiturgico = ({
     h_fecha_fin: '',
     h_hora_fin: '',
     act_estado: true,
+    act_max_reservas: null,
   });
 
   // Cargar parroquias (mismo patrón que ActoLiturgico.js)
@@ -151,10 +155,15 @@ const ModalActoLiturgico = ({
         typeof initialValues.act_estado === 'boolean'
           ? initialValues.act_estado
           : true,
+      act_max_reservas: initialValues.act_max_reservas ?? null,
     }));
+
+    // Set limitarReservas checkbox based on whether act_max_reservas has a value
+    setLimitarReservas(!!initialValues.act_max_reservas);
   }, [isOpen, initialValues, isAdmin, userParroquiaId]);
 
   const handleChange = (name, value) => {
+    if (readOnly) return;
     setValues((prev) => ({
       ...prev,
       [name]: value,
@@ -163,6 +172,7 @@ const ModalActoLiturgico = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (readOnly) return;
     setError('');
 
     const msg = validateAct(values);
@@ -183,20 +193,40 @@ const ModalActoLiturgico = ({
         payload.parroquiaid = Number(payload.parroquiaid);
       }
 
-      // En este modal siempre se crea -> estado true
-      payload.act_estado = true;
+      // Detectar si es edición o creación
+      const isEdit = !!(initialValues?.actoliturgicoid);
+      const actoId = initialValues?.actoliturgicoid;
 
-      const response = await fetch(
-        'http://localhost:5000/api/liturgical/actos-con-horario',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      let response;
+
+      if (isEdit) {
+        // EDITAR: usar endpoint PUT /api/liturgical/actos/:id
+        response = await fetch(
+          `http://localhost:5000/api/liturgical/actos/${actoId}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+            },
+            body: JSON.stringify(payload),
+          }
+        );
+      } else {
+        // CREAR: usar endpoint POST /api/liturgical/actos-con-horario
+        payload.act_estado = true;
+        response = await fetch(
+          'http://localhost:5000/api/liturgical/actos-con-horario',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+            },
+            body: JSON.stringify(payload),
+          }
+        );
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -211,7 +241,7 @@ const ModalActoLiturgico = ({
         if (onCreated) {
           onCreated(data);
         }
-        alert('✅ Acto litúrgico creado con horario correctamente');
+        alert(isEdit ? '✅ Acto litúrgico actualizado correctamente' : '✅ Acto litúrgico creado con horario correctamente');
         onClose && onClose();
       } else {
         throw new Error(data.error || 'Error desconocido');
@@ -229,161 +259,312 @@ const ModalActoLiturgico = ({
     []
   );
 
+  const labelByActo = useMemo(
+    () => Object.fromEntries((ACTO_NOMBRES || []).map(a => [a.value, a.label])),
+    []
+  );
+
+  const parroquiaNombre = useMemo(() => {
+    return parroquiaOptions.find(p => p.value === values.parroquiaid)?.label || 'Parroquia no seleccionada';
+  }, [parroquiaOptions, values.parroquiaid]);
+
   return (
     <ModalBase
       isOpen={isOpen}
       onClose={onClose}
-      title="Nuevo Acto Litúrgico"
+      title={readOnly ? "Detalle del Acto Litúrgico" : (initialValues?.actoliturgicoid ? "Editar Acto Litúrgico" : "Nuevo Acto Litúrgico")}
       icon={Church}
       size="lg"
     >
-      <form onSubmit={handleSubmit} className="space-y-4 p-6">
-        {error && (
-          <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
-            {error}
+      {readOnly ? (
+        <div className="space-y-6 p-6">
+          {/* Header */}
+          <div className="flex items-center justify-center space-x-4 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg">
+            <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white shadow-lg">
+              <Church className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-2xl font-bold text-gray-900">{values.act_titulo || 'Sin título'}</h3>
+              <p className="text-gray-600">{parroquiaNombre}</p>
+            </div>
           </div>
-        )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Parroquia */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Parroquia
-            </label>
-            <select
-              value={values.parroquiaid || ''}
-              onChange={(e) => handleChange('parroquiaid', e.target.value)}
-              disabled={!isAdmin && !!userParroquiaId}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 disabled:bg-gray-100"
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Columna Izquierda */}
+            <div className="space-y-4">
+              <div className="bg-white p-4 border rounded-lg">
+                <label className="block text-sm font-medium text-gray-500 mb-2">Información General</label>
+                <div className="space-y-2 text-sm">
+                  <p><span className="font-medium text-gray-700">Tipo:</span> <span className="text-gray-900">{labelByActo[values.act_nombre] || values.act_nombre}</span></p>
+                  <p><span className="font-medium text-gray-700">Descripción:</span> <span className="text-gray-900">{values.act_descripcion || 'Sin descripción'}</span></p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${values.act_estado ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {values.act_estado ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 border rounded-lg">
+                <label className="block text-sm font-medium text-gray-500 mb-2">Reservas</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-900 font-medium text-sm">
+                    {values.act_max_reservas ? `${values.act_max_reservas} personas máx.` : 'Sin límite de reservas (∞)'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Columna Derecha */}
+            <div className="space-y-4">
+              <div className="bg-white p-4 border rounded-lg">
+                <label className="block text-sm font-medium text-gray-500 mb-2">Horario</label>
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 w-4 h-4 text-blue-500 flex items-center justify-center font-bold text-xs border border-blue-500 rounded-full">I</div>
+                    <div>
+                      <p className="text-xs text-gray-500">Inicio</p>
+                      <p className="font-medium text-gray-900">{values.h_fecha} a las {values.h_hora}</p>
+                    </div>
+                  </div>
+                  {(values.h_fecha_fin || values.h_hora_fin) && (
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5 w-4 h-4 text-purple-500 flex items-center justify-center font-bold text-xs border border-purple-500 rounded-full">F</div>
+                      <div>
+                        <p className="text-xs text-gray-500">Fin</p>
+                        <p className="font-medium text-gray-900">{values.h_fecha_fin || values.h_fecha} a las {values.h_hora_fin || '??:??'}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white p-4 border rounded-lg">
+                <label className="block text-sm font-medium text-gray-500 mb-2">Auditoría</label>
+                <div className="text-xs text-gray-600 space-y-1">
+                  <p><span className="font-medium">Creado:</span> {initialValues.created_at ? new Date(initialValues.created_at).toLocaleString() : '-'}</p>
+                  <p><span className="font-medium">Actualizado:</span> {initialValues.updated_at ? new Date(initialValues.updated_at).toLocaleString() : '-'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-4 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-800 text-sm font-medium transition-colors"
             >
-              <option value="">Seleccione</option>
-              {parroquiaOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Tipo de acto */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Acto Litúrgico
-            </label>
-            <select
-              value={values.act_nombre || ''}
-              onChange={(e) => handleChange('act_nombre', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-            >
-              {actosOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Título */}
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Título
-            </label>
-            <input
-              type="text"
-              value={values.act_titulo || ''}
-              onChange={(e) => handleChange('act_titulo', e.target.value)}
-              placeholder="Ej. Misa dominical"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-            />
-          </div>
-
-          {/* Descripción */}
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Descripción
-            </label>
-            <textarea
-              value={values.act_descripcion || ''}
-              onChange={(e) =>
-                handleChange('act_descripcion', e.target.value)
-              }
-              placeholder="Observaciones"
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 resize-vertical"
-            />
-          </div>
-
-          {/* Fecha/Hora inicial */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Fecha inicial
-            </label>
-            <input
-              type="date"
-              value={values.h_fecha || ''}
-              onChange={(e) => handleChange('h_fecha', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Hora inicial
-            </label>
-            <input
-              type="time"
-              value={values.h_hora || ''}
-              onChange={(e) => handleChange('h_hora', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-            />
-          </div>
-
-          {/* Fecha/Hora final (opcionales) */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Fecha final (opcional)
-            </label>
-            <input
-              type="date"
-              value={values.h_fecha_fin || ''}
-              onChange={(e) => handleChange('h_fecha_fin', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Hora final (opcional)
-            </label>
-            <input
-              type="time"
-              value={values.h_hora_fin || ''}
-              onChange={(e) => handleChange('h_hora_fin', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-            />
+              Cerrar
+            </button>
           </div>
         </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-4 p-6">
+          {error && (
+            <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
+              {error}
+            </div>
+          )}
 
-        {/* Acciones */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-800 text-sm"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-4 py-2 rounded-lg text-sm font-medium text-white hover:brightness-110"
-            style={{
-              background: 'linear-gradient(90deg, var(--primary), var(--secondary))',
-            }}
-          >
-            {saving ? 'Guardando...' : 'Guardar Acto'}
-          </button>
-        </div>
-      </form>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Parroquia */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Parroquia
+              </label>
+              <select
+                value={values.parroquiaid || ''}
+                onChange={(e) => handleChange('parroquiaid', e.target.value)}
+                disabled={!isAdmin && !!userParroquiaId}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 disabled:bg-gray-100"
+              >
+                <option value="">Seleccione</option>
+                {parroquiaOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Tipo de acto */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Acto Litúrgico
+              </label>
+              <select
+                value={values.act_nombre || ''}
+                onChange={(e) => handleChange('act_nombre', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              >
+                {actosOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Título */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Título
+              </label>
+              <input
+                type="text"
+                value={values.act_titulo || ''}
+                onChange={(e) => handleChange('act_titulo', e.target.value)}
+                placeholder="Ej. Misa dominical"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              />
+            </div>
+
+            {/* Descripción */}
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Descripción
+              </label>
+              <textarea
+                value={values.act_descripcion || ''}
+                onChange={(e) =>
+                  handleChange('act_descripcion', e.target.value)
+                }
+                placeholder="Observaciones"
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 resize-vertical"
+              />
+            </div>
+
+            {/* Fecha/Hora inicial */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Fecha inicial
+              </label>
+              <input
+                type="date"
+                value={values.h_fecha || ''}
+                onChange={(e) => handleChange('h_fecha', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Hora inicial
+              </label>
+              <input
+                type="time"
+                value={values.h_hora || ''}
+                onChange={(e) => handleChange('h_hora', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              />
+            </div>
+
+            {/* Fecha/Hora final (opcionales) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Fecha final (opcional)
+              </label>
+              <input
+                type="date"
+                value={values.h_fecha_fin || ''}
+                onChange={(e) => handleChange('h_fecha_fin', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Hora final (opcional)
+              </label>
+              <input
+                type="time"
+                value={values.h_hora_fin || ''}
+                onChange={(e) => handleChange('h_hora_fin', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+              />
+            </div>
+
+            {/* Estado */}
+            <div className="md:col-span-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="actEstado"
+                  checked={values.act_estado}
+                  onChange={(e) => handleChange('act_estado', e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="actEstado" className="text-sm font-medium text-gray-700">
+                  Acto activo
+                </label>
+                <span className="text-xs text-gray-500 ml-2">
+                  (Los actos inactivos no aparecerán en el calendario)
+                </span>
+              </div>
+            </div>
+
+            {/* Limitar Reservas - Checkbox y campo condicional */}
+            <div className="md:col-span-2">
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  type="checkbox"
+                  id="limitarReservas"
+                  checked={limitarReservas}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setLimitarReservas(checked);
+                    if (!checked) {
+                      handleChange('act_max_reservas', null);
+                    }
+                  }}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="limitarReservas" className="text-sm font-medium text-gray-700">
+                  Limitar reservas
+                </label>
+              </div>
+
+              {limitarReservas && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Máximo de reservas
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={values.act_max_reservas || ''}
+                    onChange={(e) => handleChange('act_max_reservas', e.target.value ? parseInt(e.target.value) : null)}
+                    placeholder="Ej: 2 para matrimonio"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Acciones */}
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-800 text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2 rounded-lg text-sm font-medium text-white hover:brightness-110"
+              style={{
+                background: 'linear-gradient(90deg, var(--primary), var(--secondary))',
+              }}
+            >
+              {saving ? 'Guardando...' : 'Guardar Acto'}
+            </button>
+          </div>
+        </form>
+      )}
     </ModalBase>
   );
 };

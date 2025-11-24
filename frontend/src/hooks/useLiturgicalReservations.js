@@ -7,7 +7,7 @@ export default function useLiturgicalReservations(options = {}) {
   const { filters, autoList = true, ...restOptions } = options;
   const baseUrl = 'http://localhost:5000/api/liturgical/reservas';
   const { authFetch } = useAuth();
-  const didFetchRef = useRef(false);
+  const didFetchRef = useRef(false);  
 
   // Usar useCrud con la URL base sin filtros y autoList desactivado
   const crud = useCrud(baseUrl, { ...restOptions, autoList: false });

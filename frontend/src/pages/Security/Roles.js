@@ -165,21 +165,19 @@ const RolesPage = () => {
       render: (r) => (
         <div className="flex flex-col items-center gap-1">
           <span
-            className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${
-              String(r.status).toLowerCase() === 'activo'
+            className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${String(r.status).toLowerCase() === 'activo'
                 ? 'bg-green-100 text-green-700'
                 : 'bg-gray-100 text-gray-700'
-            }`}
+              }`}
           >
             {String(r.status).toLowerCase() === 'activo' ? 'Activo' : 'Inactivo'}
           </span>
           {canChangeStatus && (
             <button
-              className={`px-2 py-1 rounded-lg text-white text-xs font-medium transition whitespace-nowrap ${
-                r.status === 'Activo'
+              className={`px-2 py-1 rounded-lg text-white text-xs font-medium transition whitespace-nowrap ${r.status === 'Activo'
                   ? 'bg-red-500 hover:bg-red-600'
                   : 'bg-blue-500 hover:bg-blue-600'
-              }`}
+                }`}
               onClick={() => handleChangeStatus(r)}
             >
               {r.status === 'Activo' ? 'Dar Baja' : 'Dar Alta'}
@@ -246,7 +244,6 @@ const RolesPage = () => {
           rowKey={(r) => r.id}
           searchTerm={searchTerm}
           searchKeys={['name', 'description']}
-          itemsPerPage={7}
           hover
           striped
           emptyText="Sin roles"
@@ -260,17 +257,17 @@ const RolesPage = () => {
           modalMode === 'add'
             ? 'Nuevo Rol'
             : modalMode === 'edit'
-            ? 'Editar Rol'
-            : 'Información del Rol'
+              ? 'Editar Rol'
+              : 'Información del Rol'
         }
         icon={Shield}
         initialValues={
           selectedRole
             ? {
-                nombre: selectedRole.name || '',
-                descripcion: selectedRole.description || '',
-                estado: selectedRole.status || 'Activo',
-              }
+              nombre: selectedRole.name || '',
+              descripcion: selectedRole.description || '',
+              estado: selectedRole.status || 'Activo',
+            }
             : { nombre: '', descripcion: '', estado: 'Activo' }
         }
         size="xl"
@@ -327,11 +324,10 @@ const RolesPage = () => {
                 Estado
               </label>
               <span
-                className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${
-                  String(vals.estado).toLowerCase() === 'activo'
+                className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${String(vals.estado).toLowerCase() === 'activo'
                     ? 'bg-green-100 text-green-700'
                     : 'bg-gray-100 text-gray-700'
-                }`}
+                  }`}
               >
                 {String(vals.estado).toLowerCase() === 'activo' ? 'Activo' : 'Inactivo'}
               </span>
