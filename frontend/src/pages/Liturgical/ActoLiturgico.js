@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Church, Plus, Pencil, Trash2, Eye, Search } from 'lucide-react';
+import { Church, Plus, Minus, Pencil, Trash2, Eye, Search } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useLocation } from 'react-router-dom';
 
@@ -105,6 +105,24 @@ const ActoLiturgico = () => {
   const isAdmin = normalizedRole === 'administrador' || normalizedRole === 'admin';
   const userParroquiaId = user?.persona?.parroquiaid || null;
 
+  const handleUpdateMaxReservas = React.useCallback(async (row, increment) => {
+    const currentVal = row.act_max_reservas || 0;
+    const newVal = Math.max(0, currentVal + increment);
+
+    if (newVal === currentVal) return;
+
+    try {
+      const resp = await updateItem(row.actoliturgicoid, { act_max_reservas: newVal });
+      if (resp.success) {
+        list();
+      } else {
+        alert('Error al actualizar: ' + (resp.error || 'Desconocido'));
+      }
+    } catch (e) {
+      console.error('Error updating max reservas:', e);
+    }
+  }, [updateItem, list]);
+
   const columns = useMemo(() => {
     const canEdit = hasPermission('liturgico_actos_editar');
     const canDelete = hasPermission('liturgico_actos_eliminar');
@@ -162,13 +180,56 @@ const ActoLiturgico = () => {
       {
         key: 'max_reservas',
         header: 'Máx. Reservas',
-        width: '10%',
+        width: '15%',
         align: 'center',
         render: (r) => (
-          <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>
-            {r.act_max_reservas ? r.act_max_reservas : '∞'}
-          </span>
+          <div className="flex items-center justify-center gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); handleUpdateMaxReservas(r, -1); }}
+              className="p-1 rounded-full hover:bg-gray-200 text-gray-600 transition-colors"
+              title="Disminuir"
+            >
+              <Minus className="w-3 h-3" />
+            </button>
+            <span className="text-sm font-medium min-w-[20px] text-center" style={{ color: 'var(--text)' }}>
+              {r.act_max_reservas !== null ? r.act_max_reservas : '∞'}
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleUpdateMaxReservas(r, 1); }}
+              className="p-1 rounded-full hover:bg-gray-200 text-gray-600 transition-colors"
+              title="Aumentar"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
         ),
+      },
+      {
+        key: 'cupos',
+        header: 'Cupos',
+        width: '10%',
+        align: 'center',
+        render: (r) => {
+          const maxReservas = r.act_max_reservas || 0;
+          const reservasTotal = r.reservas_total || 0;
+          const cuposDisponibles = maxReservas > 0 ? maxReservas - reservasTotal : '∞';
+
+          // Determinar color según disponibilidad
+          let colorClass = 'text-green-600'; // Verde por defecto (hay cupos)
+          if (maxReservas > 0) {
+            if (cuposDisponibles === 0) {
+              colorClass = 'text-red-600'; // Rojo si no hay cupos
+            } else if (cuposDisponibles <= maxReservas * 0.3) {
+              colorClass = 'text-yellow-600'; // Amarillo si quedan pocos
+            }
+          }
+
+          return (
+            <span className={`text-sm font-bold ${colorClass}`}>
+              {cuposDisponibles}
+            </span>
+          );
+        },
       },
       buildActionColumn({
         onEdit: canEdit
@@ -190,7 +251,7 @@ const ActoLiturgico = () => {
         width: '30%',
       }),
     ];
-  }, [hasPermission, labelByActo]);
+  }, [hasPermission, labelByActo, handleUpdateMaxReservas]);
 
   const handleDelete = (row) => {
     setDeleteTarget(row.id || row.actoliturgicoid);

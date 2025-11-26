@@ -1075,6 +1075,45 @@ const Horarios = () => {
       placeholder: 'Descripción de la reserva'
     },
     {
+      name: 'pago_estado',
+      label: 'Estado del Pago',
+      type: 'select',
+      options: [
+        { value: 'pendiente', label: 'Pendiente' },
+        { value: 'pagado', label: 'Pagado' },
+        { value: 'vencido', label: 'Vencido' },
+        { value: 'fallido', label: 'Fallido' }
+      ],
+      placeholder: 'Seleccione estado',
+      defaultValue: 'pendiente'
+    },
+    {
+      name: 'pago_medio',
+      label: 'Método de Pago',
+      type: 'select',
+      options: [
+        { value: '', label: 'No especificado' },
+        { value: 'Yape o Plin', label: 'Yape o Plin' },
+        { value: 'Tarjeta', label: 'Tarjeta' },
+        { value: 'Efectivo', label: 'Efectivo' }
+      ],
+      placeholder: 'Seleccione método'
+    },
+    {
+      name: 'pago_monto',
+      label: 'Monto del Pago',
+      type: 'number',
+      placeholder: 'Ingrese el monto (opcional)',
+      min: 0,
+      step: 0.01
+    },
+    {
+      name: 'pago_descripcion',
+      label: 'Descripción del Pago',
+      type: 'text',
+      placeholder: 'Pago por reserva'
+    },
+    {
       name: 'estado_label',
       label: 'Estado',
       type: 'custom',
@@ -1140,13 +1179,22 @@ const Horarios = () => {
         res_descripcion: values.res_descripcion || reservaData.res_descripcion
       };
 
-      if (values.pago_data || reservaData.pago_data) {
-        const pago = values.pago_data || reservaData.pago_data;
-        payload.pago_medio = pago.pago_medio;
-        payload.pago_monto = pago.pago_monto;
-        payload.pago_descripcion = pago.pago_descripcion;
-        payload.pago_fecha = pago.pago_fecha;
-        payload.pago_estado = pago.pago_estado;
+      // Detectar información de pago (puede venir plana en values o anidada en pago_data)
+      let pagoInfo = null;
+      if (values.pago_medio) {
+        pagoInfo = values;
+      } else if (values.pago_data) {
+        pagoInfo = values.pago_data;
+      } else if (reservaData.pago_data) {
+        pagoInfo = reservaData.pago_data;
+      }
+
+      if (pagoInfo) {
+        payload.pago_medio = pagoInfo.pago_medio;
+        payload.pago_monto = pagoInfo.pago_monto;
+        payload.pago_descripcion = pagoInfo.pago_descripcion;
+        payload.pago_fecha = pagoInfo.pago_fecha;
+        payload.pago_estado = pagoInfo.pago_estado;
       }
 
       const result = await createItem(payload);
@@ -1562,22 +1610,32 @@ const Horarios = () => {
                     <p className="text-gray-500 mb-6">
                       No hay horarios programados en el rango visible. Agrega tu primer acto litúrgico para comenzar.
                     </p>
-                    <motion.button
-                      onClick={() => openActoLiturgicoModal({
-                        dateStr: format(new Date(), 'yyyy-MM-dd'),
-                        timeStr: '',
-                        parroquiaid: selectedParroquia || '',
-                        actoNombre: '',
-                        actoTitulo: ''
-                      })}
-                      className="text-white px-5 py-2.5 rounded-lg font-medium flex items-center gap-2 mx-auto transition-all hover:brightness-110 shadow-md"
-                      style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' }}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                    >
-                      <Calendar className="w-5 h-5" />
-                      Agrega tu primer acto litúrgico
-                    </motion.button>
+                    {(() => {
+                      const hasPerm = hasPermission('liturgico_horarios_AgregarActo');
+                      console.log('🔍 [DEBUG] Botón Agregar Acto:', {
+                        hasPerm,
+                        userPermissions: user?.permissions,
+                        permissionChecked: 'liturgico_horarios_AgregarActo'
+                      });
+                      return hasPerm;
+                    })() && (
+                        <motion.button
+                          onClick={() => openActoLiturgicoModal({
+                            dateStr: format(new Date(), 'yyyy-MM-dd'),
+                            timeStr: '',
+                            parroquiaid: selectedParroquia || '',
+                            actoNombre: '',
+                            actoTitulo: ''
+                          })}
+                          className="text-white px-5 py-2.5 rounded-lg font-medium flex items-center gap-2 mx-auto transition-all hover:brightness-110 shadow-md"
+                          style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)' }}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <Calendar className="w-5 h-5" />
+                          Agrega tu primer acto litúrgico
+                        </motion.button>
+                      )}
                   </div>
                 </div>
               ) : (

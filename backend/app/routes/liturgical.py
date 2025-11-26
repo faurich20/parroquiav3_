@@ -258,11 +258,16 @@ def list_actos():
                 h.h_hora,
                 h.h_fecha_fin,
                 h.h_hora_fin,
-                h.created_at as horario_created_at
+                h.created_at as horario_created_at,
+                COALESCE(COUNT(DISTINCT r.reservaid), 0) as reservas_total
             FROM public.actoliturgico a
             LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
             LEFT JOIN public.horario h ON a.actoliturgicoid = h.actoliturgicoid
+            LEFT JOIN public.reserva r ON h.horarioid = r.horarioid
             WHERE a.act_estado = TRUE
+            GROUP BY a.actoliturgicoid, a.parroquiaid, p.par_nombre, a.act_nombre, a.act_titulo, 
+                     a.act_descripcion, a.act_estado, a.act_max_reservas, a.created_at, a.updated_at,
+                     h.horarioid, h.h_fecha, h.h_hora, h.h_fecha_fin, h.h_hora_fin, h.created_at
             ORDER BY a.actoliturgicoid DESC
         """)).fetchall()
         print('[list_actos] total items:', len(items))
@@ -274,6 +279,7 @@ def list_actos():
                 'h_hora': row.h_hora,
                 'h_fecha_fin': getattr(row, 'h_fecha_fin', None),
                 'h_hora_fin': getattr(row, 'h_hora_fin', None),
+                'reservas_total': row.reservas_total,
             })
 
         result = []
@@ -287,6 +293,7 @@ def list_actos():
                 'act_descripcion': row.act_descripcion,
                 'act_estado': row.act_estado,
                 'act_max_reservas': row.act_max_reservas,
+                'reservas_total': row.reservas_total,
                 'horarioid': row.horarioid,
                 'h_fecha': row.h_fecha.isoformat() if row.h_fecha else None,
                 'h_hora': row.h_hora.strftime('%H:%M') if row.h_hora else None,
@@ -1153,15 +1160,9 @@ def delete_reserva(reservaid):
             WHERE reservaid = :id
         """), {'id': reservaid})
         
-        # Incrementar act_max_reservas (según petición usuario: "porque esta dando otro cupo al quitar esta reserva")
-        # Nota: Esto incrementa la CAPACIDAD TOTAL del acto.
-        db.session.execute(text("""
-            UPDATE public.actoliturgico
-            SET act_max_reservas = act_max_reservas + 1
-            FROM public.horario
-            WHERE public.actoliturgico.actoliturgicoid = public.horario.actoliturgicoid
-            AND public.horario.horarioid = :horarioid
-        """), {'horarioid': reserva.horarioid})
+        
+        # NO incrementar act_max_reservas - es un valor fijo
+        # Los cupos disponibles se calculan dinámicamente: act_max_reservas - reservas_actuales
         
         db.session.commit()
         

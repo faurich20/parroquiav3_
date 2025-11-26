@@ -799,8 +799,20 @@ const Reservacion = () => {
       h_hora: horaBase,
       persona_nombre: reserva.persona_nombre || reserva.res_persona_nombre || '',
       res_descripcion: reserva.res_descripcion || '',
-      pago_estado: reserva.pago_estado || 'pendiente'
+      pago_estado: reserva.pago_estado || 'pendiente',
+      pago_monto: reserva.pago_monto || null,
+      pago_medio: reserva.pago_medio || null
     };
+
+    console.log('📊 [prepareEditData] Payment data:', {
+      reservaid: reserva.reservaid,
+      pagoid: reserva.pagoid,
+      pago_monto: reserva.pago_monto,
+      pago_medio: reserva.pago_medio,
+      pago_estado: reserva.pago_estado
+    });
+
+    return result;
   }, [normalizeDateValue, normalizeTimeValue, parroquias, horarios]);
 
   const columns = useMemo(() => ([
@@ -850,6 +862,7 @@ const Reservacion = () => {
       width: '10%',
       render: (r) => {
         const estado = r.pago_estado || 'pendiente';
+        console.log('🏷️ [Estado Column] reservaid:', r.reservaid, 'pagoid:', r.pagoid, 'pago_estado:', r.pago_estado, 'estado:', estado);
         let bgColor = 'bg-gray-100 text-gray-700';
         let texto = 'Pendiente';
 
@@ -1134,6 +1147,33 @@ const Reservacion = () => {
         placeholder: 'Seleccione estado',
         getInitialValue: () => getInitialValue('pago_estado', 'pendiente'),
         disabled: modalMode === 'view' // Ahora es editable en modo edit/add
+      },
+      {
+        name: 'pago_medio',
+        label: 'Método de Pago',
+        type: 'select',
+        options: [
+          { value: '', label: 'Seleccione método' },
+          { value: 'Efectivo', label: 'Efectivo' },
+          { value: 'Yape o Plin', label: 'Yape o Plin' },
+          { value: 'Tarjeta', label: 'Tarjeta' }
+        ],
+        placeholder: 'Seleccione método',
+        getInitialValue: () => getInitialValue('pago_medio', ''),
+        disabled: modalMode === 'view' || (current?.pago_estado !== 'pagado' && current?.pago_estado !== 'Pagado'),
+        dependsOn: 'pago_estado'
+      },
+      {
+        name: 'pago_monto',
+        label: 'Monto del Pago',
+        type: 'number', // Cambiado a number para permitir edición
+        placeholder: '0.00',
+        getInitialValue: () => {
+          const monto = getInitialValue('pago_monto', '');
+          return monto ? parseFloat(monto) : '';
+        },
+        disabled: modalMode === 'view' || (current?.pago_estado !== 'pagado' && current?.pago_estado !== 'Pagado'),
+        dependsOn: 'pago_estado'
       }
     ];
 

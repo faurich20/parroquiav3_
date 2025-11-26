@@ -262,6 +262,15 @@ const ModalReserva = ({ isOpen, onClose, initialValues = {}, onSubmit, authFetch
         payload.pago_fecha = data.pago_data.pago_fecha;
         payload.pago_estado = data.pago_data.pago_estado;
       }
+      console.log('🔵 [ModalReserva handleCreate] Full data object:', data);
+      console.log('🔵 [ModalReserva handleCreate] Final payload:', payload);
+      console.log('🔵 [ModalReserva handleCreate] Payment fields:', {
+        pago_medio: payload.pago_medio,
+        pago_monto: payload.pago_monto,
+        pago_descripcion: payload.pago_descripcion,
+        pago_fecha: payload.pago_fecha,
+        pago_estado: payload.pago_estado
+      });
       if (typeof onSubmit === 'function') {
         const res = await onSubmit(payload);
         return res;
