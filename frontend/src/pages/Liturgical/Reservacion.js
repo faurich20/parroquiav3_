@@ -103,21 +103,35 @@ const createCustomIcon = (label) => {
 const Reservacion = () => {
   const { authFetch, hasPermission, user } = useAuth();
 
+  // Extraer información del usuario para filtrado (memoizado para evitar re-renders)
+  const { userRole, isAdmin, isUsuario, userParroquiaId, userPersonaId } = useMemo(() => {
+    const role = user?.role || '';
+    return {
+      userRole: role,
+      isAdmin: role === 'Administrador',
+      isUsuario: role === 'Usuario',
+      userParroquiaId: user?.persona?.parroquiaid || null,
+      userPersonaId: user?.persona?.personaid || null
+    };
+  }, [user?.role, user?.persona?.parroquiaid, user?.persona?.personaid]);
+
   // Lógica de filtros según rol
   const filters = useMemo(() => {
     if (!user) return {};
 
-    const roleName = user.role?.rol_nombre;
-    const personaId = user.persona?.personaid;
-
-    // 1. Usuario normal: solo ve sus propias reservas
-    if (roleName === 'Usuario') {
-      return { personaid: personaId };
+    // Usuario: filtrar por personaid (solo sus reservas)
+    if (isUsuario && userPersonaId) {
+      return { personaid: userPersonaId };
     }
 
-    // 2. Todos los demás roles (Admin, Párroco, Secretaria, etc.): ven TODAS las reservas
+    // Párroco y otros roles (excepto Admin): filtrar por parroquiaid en el backend
+    if (!isAdmin && userParroquiaId) {
+      return { parroquiaid: userParroquiaId };
+    }
+
+    // Administrador: sin filtro, ve todo
     return {};
-  }, [user]);
+  }, [user, isUsuario, userPersonaId, isAdmin, userParroquiaId]);
 
   const { items, loading, error, createItem, updateItem, removeItem } = useLiturgicalReservations({
     autoList: true,
@@ -862,7 +876,6 @@ const Reservacion = () => {
       width: '10%',
       render: (r) => {
         const estado = r.pago_estado || 'pendiente';
-        console.log('🏷️ [Estado Column] reservaid:', r.reservaid, 'pagoid:', r.pagoid, 'pago_estado:', r.pago_estado, 'estado:', estado);
         let bgColor = 'bg-gray-100 text-gray-700';
         let texto = 'Pendiente';
 
@@ -909,6 +922,7 @@ const Reservacion = () => {
     })
   ]), [prepareEditData, canEdit, canDelete, canView]);
 
+  // Mostrar items (el backend ya filtró según el rol)
   const displayItems = useMemo(() => items || [], [items]);
 
   // Preparar opciones de personas para el combobox

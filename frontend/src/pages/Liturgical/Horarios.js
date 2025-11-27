@@ -261,6 +261,12 @@ const Horarios = () => {
     cardHolder: ''
   });
 
+  const handleNavigate = useCallback((newDate) => {
+    if (newDate && newDate instanceof Date && !isNaN(newDate.getTime())) {
+      setDate(newDate);
+    }
+  }, []);
+
   // Filtro por parroquia para el calendario
   const [selectedParroquia, setSelectedParroquia] = useState('');
   // Entrada editable para el filtro de parroquia
@@ -1464,6 +1470,8 @@ const Horarios = () => {
     );
   }
 
+
+
   // Vista principal del calendario
   return (
     <div className="space-y-6">
@@ -1650,7 +1658,7 @@ const Horarios = () => {
                     view={view}
                     onView={setView}
                     date={date}
-                    onNavigate={setDate}
+                    onNavigate={handleNavigate}
                     defaultView="month"
                     views={['month', 'week', 'day', 'agenda']}
                     messages={customMessages}

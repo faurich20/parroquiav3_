@@ -655,14 +655,14 @@ ORDER BY h.h_fecha, h.h_hora;
 -- 5. Sistema de Pagos: pago (vinculado a reserva)
 
 -- Ventajas de esta normalización:
--- ✅ Un acto puede tener múltiples horarios (ej. misma misa en diferentes fechas)
+-- ✅ Un acto puede tener múltiples horarios (ej. misma actoliturgico en diferentes fechas)
 -- ✅ Las reservas están ligadas a horarios específicos
 -- ✅ Sistema de pagos completamente integrado
 -- ✅ Fácil mantenimiento y consultas
 -- ✅ Eliminación en cascada automática
 -- ✅ Auditoría completa con created_at/updated_at
 
--- Campos created_at y updated_at proporcionan:
+-- Campos created_at y updated_at , create_by y update_by proporcionan:
 -- ✅ Auditoría completa de cambios
 -- ✅ Trazabilidad de cuándo se programó cada acto
 -- ✅ Información útil para debugging

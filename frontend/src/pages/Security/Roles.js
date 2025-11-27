@@ -139,13 +139,13 @@ const RolesPage = () => {
     {
       key: 'nombre',
       header: 'Nombre',
-      width: '25%',
+      width: '20%',
       render: (r) => r.name,
     },
     {
       key: 'descripcion',
       header: 'Descripción',
-      width: '30%',
+      width: '20%',
       render: (r) => (
         <span style={{ color: 'var(--muted)' }}>{r.description || '-'}</span>
       ),
@@ -153,21 +153,21 @@ const RolesPage = () => {
     {
       key: 'permisos',
       header: 'Permisos',
-      width: '10%',
+      width: '8%',
       align: 'center',
       render: (r) => (Array.isArray(r.permissions) ? r.permissions.length : 0),
     },
     {
       key: 'estado',
       header: 'Estado',
-      width: '15%',
+      width: '17%',
       align: 'center',
       render: (r) => (
         <div className="flex flex-col items-center gap-1">
           <span
             className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${String(r.status).toLowerCase() === 'activo'
-                ? 'bg-green-100 text-green-700'
-                : 'bg-gray-100 text-gray-700'
+              ? 'bg-green-100 text-green-700'
+              : 'bg-gray-100 text-gray-700'
               }`}
           >
             {String(r.status).toLowerCase() === 'activo' ? 'Activo' : 'Inactivo'}
@@ -175,8 +175,8 @@ const RolesPage = () => {
           {canChangeStatus && (
             <button
               className={`px-2 py-1 rounded-lg text-white text-xs font-medium transition whitespace-nowrap ${r.status === 'Activo'
-                  ? 'bg-red-500 hover:bg-red-600'
-                  : 'bg-blue-500 hover:bg-blue-600'
+                ? 'bg-red-500 hover:bg-red-600'
+                : 'bg-blue-500 hover:bg-blue-600'
                 }`}
               onClick={() => handleChangeStatus(r)}
             >
@@ -190,7 +190,7 @@ const RolesPage = () => {
       onEdit: canEdit ? (row) => openEditModal(row) : null,
       onDelete: canDelete ? (row) => requestDeleteRole(row.id) : null,
       onView: canView ? (row) => openViewModal(row) : null,
-      width: '30%',
+      width: '35%',
     }),
   ];
 
@@ -325,8 +325,8 @@ const RolesPage = () => {
               </label>
               <span
                 className={`px-2 py-0.5 rounded-lg text-xs font-medium whitespace-nowrap ${String(vals.estado).toLowerCase() === 'activo'
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-gray-100 text-gray-700'
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-gray-100 text-gray-700'
                   }`}
               >
                 {String(vals.estado).toLowerCase() === 'activo' ? 'Activo' : 'Inactivo'}

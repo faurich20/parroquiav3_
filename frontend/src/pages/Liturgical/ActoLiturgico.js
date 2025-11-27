@@ -101,8 +101,8 @@ const ActoLiturgico = () => {
     []
   );
 
-  const normalizedRole = (user?.role || '').toString().toLowerCase();
-  const isAdmin = normalizedRole === 'administrador' || normalizedRole === 'admin';
+  const userRole = user?.role || ''; // role es un string, no un objeto
+  const isAdmin = userRole === 'Administrador'; // Rol exacto
   const userParroquiaId = user?.persona?.parroquiaid || null;
 
   const handleUpdateMaxReservas = React.useCallback(async (row, increment) => {
@@ -132,7 +132,7 @@ const ActoLiturgico = () => {
       {
         key: 'parroquia_nombre',
         header: 'Parroquia',
-        width: '20%',
+        width: '15%',
         render: (r) => (
           <div className="flex items-center gap-2">
             <Church className="w-4 h-4 text-blue-600" />
@@ -143,7 +143,7 @@ const ActoLiturgico = () => {
       {
         key: 'act_nombre',
         header: 'Tipo Acto',
-        width: '15%',
+        width: '10%',
         render: (r) => (
           <span className="text-sm font-medium text-gray-700">
             {labelByActo[r.act_nombre] || r.act_nombre}
@@ -153,7 +153,7 @@ const ActoLiturgico = () => {
       {
         key: 'act_titulo',
         header: 'Título',
-        width: '20%',
+        width: '15%',
         render: (r) => (
           <div className="flex flex-col">
             <span className="font-medium text-gray-900">{r.act_titulo}</span>
@@ -166,7 +166,7 @@ const ActoLiturgico = () => {
       {
         key: 'estado',
         header: 'Estado',
-        width: '10%',
+        width: '7%',
         align: 'center',
         render: (r) => (
           <span
@@ -180,7 +180,7 @@ const ActoLiturgico = () => {
       {
         key: 'max_reservas',
         header: 'Máx. Reservas',
-        width: '15%',
+        width: '11%',
         align: 'center',
         render: (r) => (
           <div className="flex items-center justify-center gap-1">
@@ -207,7 +207,7 @@ const ActoLiturgico = () => {
       {
         key: 'cupos',
         header: 'Cupos',
-        width: '10%',
+        width: '7%',
         align: 'center',
         render: (r) => {
           const maxReservas = r.act_max_reservas || 0;
@@ -248,7 +248,7 @@ const ActoLiturgico = () => {
             setModalOpen(true);
           }
           : null,
-        width: '30%',
+        width: '35%',
       }),
     ];
   }, [hasPermission, labelByActo, handleUpdateMaxReservas]);

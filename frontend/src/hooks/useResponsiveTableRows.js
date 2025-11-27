@@ -28,8 +28,8 @@ const useResponsiveTableRows = (defaultRows = 5) => {
       // - Table header: ~50px
       // - Paginación: ~60px
       // - Margen inferior: ~40px
-      // Total aproximado: 422px, redondeamos a 450px para seguridad
-      const reservedSpace = 450;
+      // Total aproximado: 422px, aumentado a 550px para mostrar menos filas
+      const reservedSpace = 550;
 
       // Calcular espacio disponible para filas
       const availableHeight = Math.max(0, windowHeight - reservedSpace);
