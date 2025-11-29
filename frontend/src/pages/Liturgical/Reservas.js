@@ -1330,7 +1330,19 @@ const Reservas = () => {
       >
         {canCreate && (
           <motion.button
-            onClick={() => { setCurrent({}); setModalMode('add'); setModalOpen(true); }}
+            onClick={() => {
+              const initialData = {};
+              // Auto-fill persona_nombre if user role is 'Usuario'
+              if (user?.role === 'Usuario' && user?.persona) {
+                const nombres = user.persona.per_nombres || '';
+                const apellidos = user.persona.per_apellidos || '';
+                initialData.persona_nombre = `${nombres} ${apellidos}`.trim();
+                console.log('[Reservas] Auto-filling persona_nombre for Usuario role:', initialData.persona_nombre);
+              }
+              setCurrent(initialData);
+              setModalMode('add');
+              setModalOpen(true);
+            }}
             className="text-white px-4 py-2 rounded-xl font-medium flex items-center gap-2 transition-all hover:brightness-110"
             style={{ background: 'linear-gradient(90deg, var(--primary), var(--secondary))' }}
             whileHover={{ scale: 1.02 }}
