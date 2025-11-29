@@ -100,7 +100,7 @@ const createCustomIcon = (label) => {
   });
 };
 
-const Reservacion = () => {
+const Reservas = () => {
   const { authFetch, hasPermission, user } = useAuth();
 
   // Extraer información del usuario para filtrado (memoizado para evitar re-renders)
@@ -119,17 +119,28 @@ const Reservacion = () => {
   const filters = useMemo(() => {
     if (!user) return {};
 
+    console.log('🔍 [Reservas] User info:', {
+      role: user?.role,
+      personaid: user?.persona?.personaid,
+      parroquiaid: user?.persona?.parroquiaid,
+      email: user?.email,
+      name: user?.name
+    });
+
     // Usuario: filtrar por personaid (solo sus reservas)
     if (isUsuario && userPersonaId) {
+      console.log('🔍 [Reservas] Aplicando filtro Usuario:', { personaid: userPersonaId });
       return { personaid: userPersonaId };
     }
 
     // Párroco y otros roles (excepto Admin): filtrar por parroquiaid en el backend
     if (!isAdmin && userParroquiaId) {
+      console.log('🔍 [Reservas] Aplicando filtro Parroquia:', { parroquiaid: userParroquiaId });
       return { parroquiaid: userParroquiaId };
     }
 
     // Administrador: sin filtro, ve todo
+    console.log('🔍 [Reservas] Sin filtros (Admin)');
     return {};
   }, [user, isUsuario, userPersonaId, isAdmin, userParroquiaId]);
 
@@ -162,6 +173,7 @@ const Reservacion = () => {
     cvv: '',
     cardHolder: ''
   });
+  const [hidePayLater, setHidePayLater] = useState(false);
 
   // Permisos para reservas (módulo)
   const canCreate = hasPermission('liturgico_reservas_crear');
@@ -301,6 +313,7 @@ const Reservacion = () => {
       case 'email':
       case 'date':
       case 'time':
+      case 'number':
         return (
           <div key={campo.name}>
             <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
@@ -403,6 +416,7 @@ const Reservacion = () => {
                 {value === 'false' && (
                   <motion.button
                     onClick={() => {
+                      setHidePayLater(false);
                       setPaymentModalOpen(true);
                       setPaymentData({
                         pago_medio: '',
@@ -662,17 +676,19 @@ const Reservacion = () => {
             >
               Cancelar
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                // Lógica para pagar después (estado pendiente)
-                console.log('Pagar después:', paymentData);
-                setPaymentModalOpen(false);
-              }}
-              className="px-4 py-2 border border-yellow-300 rounded-lg hover:bg-yellow-50 text-yellow-700 hover:text-yellow-800"
-            >
-              ⏰ Pagar Después
-            </button>
+            {!hidePayLater && (
+              <button
+                type="button"
+                onClick={() => {
+                  // Lógica para pagar después (estado pendiente)
+                  console.log('Pagar después:', paymentData);
+                  setPaymentModalOpen(false);
+                }}
+                className="px-4 py-2 border border-yellow-300 rounded-lg hover:bg-yellow-50 text-yellow-700 hover:text-yellow-800"
+              >
+                ⏰ Pagar Después
+              </button>
+            )}
             <button
               type="button"
               onClick={async () => {
@@ -857,7 +873,7 @@ const Reservacion = () => {
     },
     {
       key: 'estado',
-      header: 'Estado (TEST)',
+      header: 'Estado',
       width: '10%',
       render: (r) => {
         const estado = String(r.pago_estado || 'pendiente').trim().toLowerCase();
@@ -884,8 +900,6 @@ const Reservacion = () => {
             <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${bgColor}`}>
               {texto}
             </span>
-            {/* DEBUG: Mostrar valor crudo */}
-            <span className="text-[10px] text-gray-400">{String(r.pago_estado)}</span>
 
             {(estado === 'pendiente' || !r.pago_estado) && (
               <button
@@ -902,6 +916,15 @@ const Reservacion = () => {
                     cvv: '',
                     cardHolder: ''
                   });
+                  setPaymentData({
+                    pago_medio: '',
+                    pago_monto: '',
+                    cardNumber: '',
+                    expiryDate: '',
+                    cvv: '',
+                    cardHolder: ''
+                  });
+                  setHidePayLater(true);
                   setPaymentModalOpen(true);
                 }}
                 className="px-3 py-1 text-xs font-bold text-white rounded shadow-md hover:scale-105 transition-transform flex items-center gap-1"
@@ -1188,20 +1211,19 @@ const Reservacion = () => {
         ],
         placeholder: 'Seleccione método',
         getInitialValue: () => getInitialValue('pago_medio', ''),
-        disabled: modalMode === 'view' || (current?.pago_estado !== 'pagado' && current?.pago_estado !== 'Pagado'),
-        dependsOn: 'pago_estado'
+        disabled: modalMode === 'view'
       },
       {
         name: 'pago_monto',
         label: 'Monto del Pago',
-        type: 'number', // Cambiado a number para permitir edición
+        type: 'text',
         placeholder: '0.00',
         getInitialValue: () => {
           const monto = getInitialValue('pago_monto', '');
-          return monto ? parseFloat(monto) : '';
+          return monto ? String(monto) : '';
         },
-        disabled: modalMode === 'view' || (current?.pago_estado !== 'pagado' && current?.pago_estado !== 'Pagado'),
-        dependsOn: 'pago_estado'
+        disabled: modalMode === 'view',
+        inputMode: 'decimal'
       }
     ];
 
@@ -1403,4 +1425,4 @@ const Reservacion = () => {
   );
 };
 
-export default Reservacion;
+export default Reservas;

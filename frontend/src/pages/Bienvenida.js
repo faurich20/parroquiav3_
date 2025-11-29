@@ -10,7 +10,7 @@ import { useAuth } from "../contexts/AuthContext";
 const modules = [
   {
     name: "Módulo de Gestión",
-    path: "/seguridad/usuarios",
+    path: "/seguridad",
     icon: Shield,
     color: "from-blue-500 to-indigo-500",
     perms: ["seguridad", "seguridad_usuarios", "seguridad_roles", "seguridad_permisos", "seguridad_parroquias"],
@@ -24,7 +24,7 @@ const modules = [
   },
   {
     name: "Módulo de Actos Litúrgicos",
-    path: "/liturgico",
+    path: "/liturgical",
     icon: Church,
     color: "from-purple-500 to-pink-500",
     // Cualquier permiso litúrgico permite ver el módulo
@@ -73,7 +73,7 @@ const modules = [
   },
   {
     name: "Reportes Generales",
-    path: "/reportes/gerenciales",
+    path: "/reports",
     icon: FileText,
     color: "from-pink-500 to-rose-500",
     perms: ["reportes", "reportes_gerenciales", "reportes_transaccionales"],

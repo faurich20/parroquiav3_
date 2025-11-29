@@ -121,9 +121,8 @@ const ModalCrudGenerico = ({
     const value = values[campo.name];
     const setValue = (v) => {
       setValues(prev => ({ ...prev, [campo.name]: v }));
-      setRenderTrigger(prev => prev + 1);
     };
-    const disabled = soloLectura || campo.disabled;
+    const disabled = soloLectura || (typeof campo.disabled === 'function' ? campo.disabled(values) : campo.disabled);
 
     // ✅ FIX: Agregar key única basada en el nombre del campo
     const fieldKey = `field-${campo.name}-${mode}`;
@@ -138,6 +137,7 @@ const ModalCrudGenerico = ({
       case 'password':
       case 'date':
       case 'time':
+      case 'number':
         return (
           <div key={fieldKey}>
             <label className="block text-sm font-medium text-gray-500 mb-1">{campo.label}</label>
@@ -162,6 +162,7 @@ const ModalCrudGenerico = ({
               placeholder={campo.placeholder}
               disabled={disabled}
               min={campo.min}
+              inputMode={campo.inputMode}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
             />
           </div>
@@ -224,8 +225,6 @@ const ModalCrudGenerico = ({
                     }
                   }
                 });
-
-                setRenderTrigger(prev => prev + 1);
 
                 // Ejecutar callback onChange personalizado si existe
                 if (typeof campo.onChange === 'function') {

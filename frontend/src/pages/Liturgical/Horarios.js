@@ -691,6 +691,16 @@ const Horarios = () => {
   const openReservationModal = useCallback(({ dateStr, timeStr, horarioid, parroquiaid, actoNombre, actoTitulo }) => {
     console.log('[Horarios] openReservationModal payload', { dateStr, timeStr, horarioid, parroquiaid, actoNombre, actoTitulo });
     if (!dateStr) return;
+
+    // Auto-fill persona_nombre if user role is 'Usuario'
+    let personaNombre = '';
+    if (user?.role === 'Usuario' && user?.persona) {
+      const nombres = user.persona.per_nombres || '';
+      const apellidos = user.persona.per_apellidos || '';
+      personaNombre = `${nombres} ${apellidos}`.trim();
+      console.log('[Horarios] Auto-filling persona_nombre for Usuario role:', personaNombre);
+    }
+
     setReservaData({
       h_fecha: dateStr,
       h_hora: timeStr || '',
@@ -698,12 +708,12 @@ const Horarios = () => {
       parroquiaid: parroquiaid || selectedParroquia || '',
       acto_nombre: actoNombre || '',
       acto_titulo: actoTitulo || '',
-      persona_nombre: '',
+      persona_nombre: personaNombre,
       res_descripcion: '',
       pago_estado: 'pendiente'
     });
     setReservaModalOpen(true);
-  }, [selectedParroquia]);
+  }, [selectedParroquia, user]);
 
   const openActoLiturgicoModal = useCallback(({ dateStr, timeStr, parroquiaid, actoNombre, fechaInicio, fechaFin }) => {
     console.log('[Horarios] openActoLiturgicoModal payload', { dateStr, timeStr, parroquiaid, actoNombre, fechaInicio, fechaFin });

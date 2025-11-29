@@ -9,6 +9,8 @@
             "autoprefixer": "^10.0.0",
             "date-fns": "^4.1.0",
             "framer-motion": "latest",
+            "jspdf": "^3.0.4",
+            "jspdf-autotable": "^5.0.2",
             "leaflet": "^1.9.4",
             "lucide-react": "latest",
             "node.js": "^0.0.1-security",

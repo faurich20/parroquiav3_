@@ -24,11 +24,14 @@ import ParroquiasPage from './pages/Security/Parroquias';
 // Liturgical Pages
 import ActoLiturgico from './pages/Liturgical/ActoLiturgico';
 import Horarios from './pages/Liturgical/Horarios';
-import Reservacion from './pages/Liturgical/Reservacion';
+import Reservas from './pages/Liturgical/Reservas';
 import ReporteReserva from './pages/Liturgical/ReporteReserva';
+import OccupancyReport from './pages/Liturgical/OccupancyReport'; // Ruta consistente
+import ParishActivityReport from './pages/Liturgical/ParishActivityReport'; // Ruta corregida y consistente
 
 // Reports Pages
 import ManagementReports from './pages/Reports/ManagementReports';
+import FinancialReport from './pages/Reports/FinancialReport';
 import TransactionReports from './pages/Reports/TransactionReports';
 // Componente protegido con Layout y Outlet
 const ProtectedRoutes = () => {
@@ -88,7 +91,9 @@ const SecurityEntry = () => {
 };
 
 const reportsRoutes = [
-  { path: '/reportes/gerenciales', perms: ['reportes_gerenciales', 'reportes'] },
+  // La primera ruta debe ser la del reporte que ya construimos
+  { path: '/reports/financial', perms: ['reportes_gerenciales'] },
+  { path: '/reports/management', perms: ['reportes_gerenciales'] },
   { path: '/reportes/transaccionales', perms: ['reportes_transaccionales', 'reportes'] }
 ];
 
@@ -118,10 +123,11 @@ const LiturgicalEntry = () => {
   const canReservas = hasPermission('liturgico') || hasPermission('liturgico_reservas');
   const canReportes = hasPermission('liturgico') || hasPermission('liturgico_reportes');
 
-  if (canActos) return <Navigate to="/liturgico/gestionar" replace />;
-  if (canHorarios) return <Navigate to="/liturgico/horarios" replace />;
-  if (canReservas) return <Navigate to="/liturgico/reservas" replace />;
-  if (canReportes) return <Navigate to="/liturgico/reportes" replace />;
+  // Redirigir a las rutas estandarizadas
+  if (canActos) return <Navigate to="/liturgical/acts" replace />;
+  if (canHorarios) return <Navigate to="/liturgical/horarios" replace />;
+  if (canReservas) return <Navigate to="/liturgical/reservations" replace />;
+  if (canReportes) return <Navigate to="/liturgical/reports/reservations" replace />;
 
   return <Navigate to="/bienvenida" replace />;
 };
@@ -155,7 +161,7 @@ const App = () => {
             <Route path="/seguridad/permisos" element={<RequirePermission perm="seguridad"><PermissionsPage /></RequirePermission>} />
             <Route path="/seguridad/parroquias" element={<RequirePermission perm="seguridad"><ParroquiasPage /></RequirePermission>} />
             <Route
-              path="/reportes"
+              path="/reports"
               element={
                 <RequirePermission perm={['reportes', 'reportes_gerenciales', 'reportes_transaccionales']}>
                   <ReportsEntry />
@@ -163,7 +169,7 @@ const App = () => {
               }
             />
             <Route
-              path="/liturgico"
+              path="/liturgical"
               element={
                 <RequirePermission
                   perm={[
@@ -179,7 +185,7 @@ const App = () => {
               }
             />
             <Route
-              path="/liturgico/gestionar"
+              path="/liturgical/acts"
               element={
                 <RequirePermission
                   perm={['liturgico', 'liturgico_actos', 'liturgico_actos_ver']}
@@ -189,7 +195,7 @@ const App = () => {
               }
             />
             <Route
-              path="/liturgico/horarios"
+              path="/liturgical/horarios"
               element={
                 <RequirePermission perm={['liturgico', 'liturgico_horarios']}>
                   <Horarios />
@@ -197,23 +203,60 @@ const App = () => {
               }
             />
             <Route
-              path="/liturgico/reservas"
+              path="/liturgical/reservations"
               element={
                 <RequirePermission perm={['liturgico', 'liturgico_reservas']}>
-                  <Reservacion />
+                  <Reservas />
                 </RequirePermission>
               }
             />
             <Route
-              path="/liturgico/reportes"
+              path="/liturgical/reports/reservations"
               element={
                 <RequirePermission perm={['liturgico', 'liturgico_reportes']}>
                   <ReporteReserva />
                 </RequirePermission>
               }
             />
-            <Route path="/reportes/gerenciales" element={<RequirePermission perm="reportes"><ManagementReports /></RequirePermission>} />
-            <Route path="/reportes/transaccionales" element={<RequirePermission perm="reportes"><TransactionReports /></RequirePermission>} />
+            <Route
+              path="/liturgical/reports/occupancy"
+              element={
+                <RequirePermission perm={['liturgico', 'liturgico_reportes']}>
+                  <OccupancyReport />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/liturgical/reports/parish-activity"
+              element={
+                <RequirePermission perm={['liturgico', 'liturgico_reportes']}>
+                  <ParishActivityReport />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/reports/management"
+              element={
+                <RequirePermission perm="reportes">
+                  <ManagementReports />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/reports/financial"
+              element={
+                <RequirePermission perm={['reportes_gerenciales', 'reportes']}>
+                  <FinancialReport />
+                </RequirePermission>
+              }
+            />
+             {/* Ruta para Reportes Transaccionales */}
+            <Route 
+              path="/reports/transactional" 
+              element={
+                <RequirePermission perm="reportes_transaccionales"><TransactionReports /></RequirePermission>
+              } 
+            />
           </Route>
         </Routes>
       </AuthProvider>

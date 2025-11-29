@@ -684,21 +684,85 @@ def create_horario():
 @permission_required('liturgico_reservas_ver', 'liturgico_reservas', 'liturgico')
 def list_reservas():
     """Lista todas las reservas de actos litúrgicos"""
+    from app.models import User, Persona
+    from flask_jwt_extended import get_jwt_identity
+
     try:
+        # --- LÓGICA DE PERMISOS POR ROL ---
+        current_user_id = int(get_jwt_identity())
+        user = User.query.get(current_user_id)
+        user_role = (user.role if user else '').lower()
+        is_admin = user_role in ('administrador', 'admin')
+
+        user_parroquia_id = None
+        if not is_admin:
+            persona = Persona.query.filter_by(userid=user.id).first()
+            if persona:
+                user_parroquia_id = persona.parroquiaid
+        # --- FIN LÓGICA DE PERMISOS ---
+
         # Obtener parámetros de filtro
         personaid = request.args.get('personaid', type=int)
-        parroquiaid = request.args.get('parroquiaid', type=int)
+        parroquiaid_from_request = request.args.get('parroquiaid', type=int)
 
         params = {}
         where_clauses = []
 
+        # Si se especifica personaid (rol Usuario), filtrar por múltiples criterios
         if personaid:
-            where_clauses.append("r.personaid = :personaid")
-            params['personaid'] = personaid
+            try:
+                # Obtener información completa de la persona y usuario
+                persona_obj = Persona.query.get(personaid)
+                if persona_obj:
+                    # Obtener datos del usuario asociado
+                    user_obj = User.query.get(persona_obj.userid) if persona_obj.userid else None
+                    
+                    persona_nombre_completo = f"{persona_obj.per_nombres} {persona_obj.per_apellidos}".strip()
+                    
+                    # Construir condición OR con múltiples criterios de coincidencia
+                    match_conditions = []
+                    
+                    # Siempre agregar filtro por personaid
+                    match_conditions.append("r.personaid = :personaid")
+                    params['personaid'] = personaid
+                    
+                    # Filtro por nombre completo
+                    if persona_nombre_completo:
+                        match_conditions.append("LOWER(TRIM(r.res_persona_nombre)) = LOWER(:persona_nombre)")
+                        params['persona_nombre'] = persona_nombre_completo
+                    
+                    # Agregar email si existe
+                    if user_obj and user_obj.email:
+                        match_conditions.append("LOWER(TRIM(r.res_persona_nombre)) = LOWER(:user_email)")
+                        params['user_email'] = user_obj.email
+                    
+                    # Agregar nombre de usuario si existe
+                    if user_obj and user_obj.name:
+                        match_conditions.append("LOWER(TRIM(r.res_persona_nombre)) = LOWER(:user_name)")
+                        params['user_name'] = user_obj.name
+                    
+                    where_clauses.append(f"({' OR '.join(match_conditions)})")
+                    
+                    print(f'📋 [list_reservas] Filtrando Usuario por: personaid={personaid}, nombre="{persona_nombre_completo}", email={user_obj.email if user_obj else None}, username={user_obj.name if user_obj else None}')
+                    print(f'📋 [list_reservas] Condiciones: {match_conditions}')
+                else:
+                    where_clauses.append("r.personaid = :personaid")
+                    params['personaid'] = personaid
+            except Exception as e:
+                print(f'❌ [list_reservas] Error al construir filtro Usuario: {e}')
+                # Fallback a filtro simple
+                where_clauses.append("r.personaid = :personaid")
+                params['personaid'] = personaid
         
-        if parroquiaid:
-            where_clauses.append("a.parroquiaid = :parroquiaid")
-            params['parroquiaid'] = parroquiaid
+        # Forzar filtro de parroquia SOLO para no-admins que NO sean Usuario
+        # Usuario ya tiene su filtro por personaid, no necesita filtro de parroquia
+        if not personaid:  # Si NO se está filtrando por personaid (no es Usuario)
+            if user_parroquia_id:
+                where_clauses.append("a.parroquiaid = :parroquiaid")
+                params['parroquiaid'] = user_parroquia_id
+            elif is_admin and parroquiaid_from_request:
+                where_clauses.append("a.parroquiaid = :parroquiaid")
+                params['parroquiaid'] = parroquiaid_from_request
 
         where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
@@ -1368,3 +1432,403 @@ def debug_reservas_horario(horarioid):
     except Exception as e:
         print('Error debug_reservas_horario', e)
         return jsonify({'error': str(e)}), 500
+
+# =========================================================
+# ENDPOINT PARA DASHBOARD
+# =========================================================
+
+@liturgical_bp.route('/dashboard-stats', methods=['GET'])
+@jwt_required()
+def get_dashboard_stats():
+    """Obtiene estadísticas clave para el dashboard principal."""
+    try:
+        # 1. Total de miembros (personas)
+        miembros_activos = db.session.execute(text("SELECT COUNT(*) FROM public.persona")).scalar_one_or_none() or 0
+
+        # 2. Eventos (horarios) este mes
+        eventos_mes = db.session.execute(text("""
+            SELECT COUNT(*) FROM public.horario
+            WHERE h_fecha >= date_trunc('month', CURRENT_DATE)
+              AND h_fecha < date_trunc('month', CURRENT_DATE) + interval '1 month'
+        """)).scalar_one_or_none() or 0
+
+        # 3. Total de reservas
+        total_reservas = db.session.execute(text("SELECT COUNT(*) FROM public.reserva")).scalar_one_or_none() or 0
+
+        # 4. Ingresos totales (solo pagos confirmados)
+        ingresos_totales = db.session.execute(text("""
+            SELECT COALESCE(SUM(pago_monto), 0) 
+            FROM public.pago 
+            WHERE pago_estado = 'pagado'
+        """)).scalar_one_or_none() or 0
+
+        return jsonify({
+            'stats': {
+                'miembros_activos': miembros_activos,
+                'eventos_este_mes': eventos_mes,
+                'total_reservas': total_reservas,
+                'ingresos_totales': float(ingresos_totales)
+            }
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Error en get_dashboard_stats: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+# =========================================================
+# ENDPOINTS PARA REPORTES
+# =========================================================
+
+@liturgical_bp.route('/reports/parish-activity', methods=['GET'])
+@jwt_required()
+@permission_required('liturgico_reportes')
+def get_parish_activity_report():
+    """
+    Genera un reporte de actividad por parroquia.
+    - Admins ven todas las parroquias.
+    - Otros roles ven solo su parroquia.
+    """
+    from app.models import User, Persona
+    from flask_jwt_extended import get_jwt_identity
+
+    try:
+        current_user_id = int(get_jwt_identity())
+        user = User.query.get(current_user_id)
+        user_role = (user.role if user else '').lower()
+        is_admin = user_role in ('administrador', 'admin')
+
+        user_parroquia_id = None
+        if not is_admin:
+            persona = Persona.query.filter_by(userid=user.id).first()
+            if persona:
+                user_parroquia_id = persona.parroquiaid
+
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+
+        params = {}
+
+        where_parroquia = ""
+        if user_parroquia_id:
+            where_parroquia = "WHERE p.parroquiaid = :user_parroquia_id"
+            params['user_parroquia_id'] = user_parroquia_id
+
+        # Construir condiciones de fecha para los CASE
+        date_condition = ""
+        if start_date and end_date:
+            date_condition = "AND h.h_fecha >= :start_date AND h.h_fecha <= :end_date"
+            params['start_date'] = start_date
+            params['end_date'] = end_date
+        elif start_date:
+            date_condition = "AND h.h_fecha >= :start_date"
+            params['start_date'] = start_date
+        elif end_date:
+            date_condition = "AND h.h_fecha <= :end_date"
+            params['end_date'] = end_date
+
+        query = text(f"""
+            SELECT 
+                p.parroquiaid,
+                p.par_nombre,
+                COALESCE(
+                    COUNT(DISTINCT CASE 
+                        WHEN h.horarioid IS NOT NULL {date_condition}
+                        THEN h.horarioid 
+                    END), 
+                0) as total_eventos,
+                COALESCE(
+                    COUNT(DISTINCT CASE 
+                        WHEN r.reservaid IS NOT NULL {date_condition}
+                        THEN r.reservaid 
+                    END), 
+                0) as total_reservas,
+                COALESCE(
+                    SUM(CASE 
+                        WHEN pg.pago_estado = 'pagado' {date_condition}
+                        THEN pg.pago_monto 
+                        ELSE 0 
+                    END), 
+                0) as ingresos_totales
+            FROM public.parroquia p
+            LEFT JOIN public.actoliturgico a ON p.parroquiaid = a.parroquiaid
+            LEFT JOIN public.horario h ON a.actoliturgicoid = h.actoliturgicoid
+            LEFT JOIN public.reserva r ON h.horarioid = r.horarioid
+            LEFT JOIN public.pago pg ON r.pagoid = pg.pagoid
+            {where_parroquia}
+            GROUP BY p.parroquiaid, p.par_nombre
+            ORDER BY p.par_nombre;
+        """)
+
+        results = db.session.execute(query, params).fetchall()
+
+        report_data = [
+            {
+                'parroquiaid': row.parroquiaid,
+                'parroquia_nombre': row.par_nombre,
+                'total_eventos': row.total_eventos,
+                'total_reservas': row.total_reservas,
+                'ingresos_totales': float(row.ingresos_totales)
+            } for row in results
+        ]
+
+        return jsonify({'items': report_data}), 200
+
+    except Exception as e:
+        print(f"❌ Error en get_parish_activity_report: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Error interno del servidor'}), 500
+    
+@liturgical_bp.route('/reports/occupancy', methods=['GET'])
+@jwt_required()
+@permission_required('liturgico_reportes')
+def get_occupancy_report():
+    """
+    Genera un reporte de ocupación de cupos para eventos futuros.
+    """
+    try:
+        query = text("""
+            SELECT
+                h.horarioid,
+                h.h_fecha,
+                h.h_hora,
+                a.act_titulo,
+                p.par_nombre as parroquia_nombre,
+                a.act_max_reservas,
+                (SELECT COUNT(*) FROM public.reserva r WHERE r.horarioid = h.horarioid) as reservas_count
+            FROM public.horario h
+            JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
+            JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
+            WHERE h.h_fecha >= CURRENT_DATE
+            AND a.act_estado = TRUE
+            ORDER BY h.h_fecha, h.h_hora;
+        """)
+
+        results = db.session.execute(query).fetchall()
+
+        report_data = [
+            {
+                'horarioid': row.horarioid,
+                'fecha': row.h_fecha.isoformat() if row.h_fecha else None,
+                'hora': row.h_hora.strftime('%H:%M') if row.h_hora else None,
+                'titulo': row.act_titulo,
+                'parroquia_nombre': row.parroquia_nombre,
+                'max_reservas': row.act_max_reservas,
+                'reservas_count': row.reservas_count
+            } for row in results
+        ]
+
+        return jsonify({'items': report_data}), 200
+
+    except Exception as e:
+        print(f"❌ Error en get_occupancy_report: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Error interno del servidor', 'details': str(e)}), 500
+
+@liturgical_bp.route('/reports/financial', methods=['GET'])
+@jwt_required()
+@permission_required('reportes_gerenciales')
+def get_financial_report():
+    """
+    Genera un reporte financiero detallado de todos los pagos.
+    """
+    try:
+        # Obtener parámetros de filtro
+        year = request.args.get('year', type=int)
+        month = request.args.get('month', type=int)
+        pago_medio = request.args.get('pago_medio')
+        pago_estado = request.args.get('pago_estado')
+        parroquiaid = request.args.get('parroquiaid', type=int)
+        acto_nombre = request.args.get('acto_nombre')
+
+        params = {}
+        where_clauses = []
+
+        if year:
+            where_clauses.append("EXTRACT(YEAR FROM pg.pago_fecha) = :year")
+            params['year'] = year
+        if month:
+            where_clauses.append("EXTRACT(MONTH FROM pg.pago_fecha) = :month")
+            params['month'] = month
+        if pago_medio:
+            where_clauses.append("pg.pago_medio = :pago_medio")
+            params['pago_medio'] = pago_medio
+        if pago_estado:
+            where_clauses.append("pg.pago_estado = :pago_estado")
+            params['pago_estado'] = pago_estado
+        if parroquiaid:
+            where_clauses.append("a.parroquiaid = :parroquiaid")
+            params['parroquiaid'] = parroquiaid
+        if acto_nombre:
+            where_clauses.append("a.act_nombre = :acto_nombre")
+            params['acto_nombre'] = acto_nombre
+
+        where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+        query = text(f"""
+            SELECT
+                pg.pagoid, pg.pago_fecha, pg.pago_medio, pg.pago_monto, pg.pago_estado,
+                a.act_nombre, a.act_titulo,
+                p.par_nombre,
+                COALESCE(per.per_nombres || ' ' || per.per_apellidos, r.res_persona_nombre) as persona_reserva
+            FROM public.pago pg
+            LEFT JOIN public.reserva r ON pg.pagoid = r.pagoid
+            LEFT JOIN public.horario h ON r.horarioid = h.horarioid
+            LEFT JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
+            LEFT JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
+            LEFT JOIN public.persona per ON r.personaid = per.personaid
+            {where_sql}
+            ORDER BY pg.pago_fecha DESC;
+        """)
+
+        results = db.session.execute(query, params).fetchall()
+
+        report_data = [dict(row._mapping) for row in results]
+
+        # Convertir tipos de datos para JSON
+        for item in report_data:
+            item['pago_fecha'] = item['pago_fecha'].isoformat() if item.get('pago_fecha') else None
+            item['pago_monto'] = float(item['pago_monto']) if item.get('pago_monto') is not None else 0.0
+
+        return jsonify({'items': report_data}), 200
+
+    except Exception as e:
+        print(f"❌ Error en get_financial_report: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+@liturgical_bp.route('/reports/celebrated-acts', methods=['GET'])
+@jwt_required()
+@permission_required('reportes_gerenciales')
+def get_celebrated_acts_report():
+    """
+    Genera un reporte de actos litúrgicos (misas, etc.) celebrados o pendientes.
+    """
+    try:
+        # Obtener parámetros de filtro
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        acto_nombre = request.args.get('acto_nombre')
+        parroquiaid = request.args.get('parroquiaid', type=int)
+        estado = request.args.get('estado') # 'realizado' o 'pendiente'
+
+        params = {}
+        where_clauses = ["a.act_estado = TRUE"]
+
+        if start_date:
+            where_clauses.append("h.h_fecha >= :start_date")
+            params['start_date'] = start_date
+        if end_date:
+            where_clauses.append("h.h_fecha <= :end_date")
+            params['end_date'] = end_date
+        if acto_nombre:
+            where_clauses.append("a.act_nombre = :acto_nombre")
+            params['acto_nombre'] = acto_nombre
+        if parroquiaid:
+            where_clauses.append("a.parroquiaid = :parroquiaid")
+            params['parroquiaid'] = parroquiaid
+        if estado == 'realizado':
+            where_clauses.append("h.h_fecha < CURRENT_DATE")
+        elif estado == 'pendiente':
+            where_clauses.append("h.h_fecha >= CURRENT_DATE")
+
+        where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+        query = text(f"""
+            SELECT
+                h.horarioid, h.h_fecha, h.h_hora,
+                a.act_nombre, a.act_titulo,
+                p.par_nombre,
+                (SELECT COUNT(*) FROM public.reserva r WHERE r.horarioid = h.horarioid) as asistentes
+            FROM public.horario h
+            JOIN public.actoliturgico a ON h.actoliturgicoid = a.actoliturgicoid
+            JOIN public.parroquia p ON a.parroquiaid = p.parroquiaid
+            {where_sql}
+            ORDER BY h.h_fecha DESC, h.h_hora DESC;
+        """)
+
+        results = db.session.execute(query, params).fetchall()
+        report_data = [dict(row._mapping) for row in results]
+
+        for item in report_data:
+            item['h_fecha'] = item['h_fecha'].isoformat() if item.get('h_fecha') else None
+            item['h_hora'] = item['h_hora'].strftime('%H:%M') if item.get('h_hora') else None
+
+        return jsonify({'items': report_data}), 200
+
+    except Exception as e:
+        print(f"❌ Error en get_celebrated_acts_report: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+@liturgical_bp.route('/reports/registered-parishioners', methods=['GET'])
+@jwt_required()
+@permission_required('reportes_transaccionales')
+def get_parishioners_report():
+    """
+    Genera un reporte de feligreses registrados.
+    """
+    try:
+        parroquiaid = request.args.get('parroquiaid', type=int)
+        distritoid = request.args.get('distritoid', type=int)
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        has_reservations = request.args.get('has_reservations')
+
+        params = {}
+        where_clauses = []
+        having_clauses = []
+
+        if parroquiaid:
+            where_clauses.append("per.parroquiaid = :parroquiaid")
+            params['parroquiaid'] = parroquiaid
+        if distritoid:
+            where_clauses.append("par.distritoid = :distritoid")
+            params['distritoid'] = distritoid
+        if start_date:
+            where_clauses.append("per.created_at >= :start_date")
+            params['start_date'] = start_date
+        if end_date:
+            where_clauses.append("per.created_at <= :end_date")
+            params['end_date'] = end_date
+        
+        if has_reservations == 'yes':
+            having_clauses.append("COUNT(r.reservaid) > 0")
+        elif has_reservations == 'no':
+            having_clauses.append("COUNT(r.reservaid) = 0")
+
+        where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+        having_sql = "HAVING " + " AND ".join(having_clauses) if having_clauses else ""
+
+        query = text(f"""
+            SELECT
+                per.personaid, per.per_nombres, per.per_apellidos, per.fecha_nacimiento,
+                per.per_telefono, per.created_at as fecha_registro,
+                u.email,
+                par.par_nombre,
+                d.dis_nombre,
+                COUNT(r.reservaid) as numero_reservas
+            FROM public.persona per
+            LEFT JOIN public.users u ON per.userid = u.id
+            LEFT JOIN public.parroquia par ON per.parroquiaid = par.parroquiaid
+            LEFT JOIN public.distrito d ON par.distritoid = d.distritoid
+            LEFT JOIN public.reserva r ON per.personaid = r.personaid
+            {where_sql}
+            GROUP BY per.personaid, u.email, par.par_nombre, d.dis_nombre
+            {having_sql}
+            ORDER BY per.created_at DESC;
+        """)
+
+        results = db.session.execute(query, params).fetchall()
+        report_data = [dict(row._mapping) for row in results]
+
+        for item in report_data:
+            item['fecha_nacimiento'] = item['fecha_nacimiento'].isoformat() if item.get('fecha_nacimiento') else None
+            item['fecha_registro'] = item['fecha_registro'].isoformat() if item.get('fecha_registro') else None
+
+        return jsonify({'items': report_data}), 200
+
+    except Exception as e:
+        print(f"❌ Error en get_parishioners_report: {str(e)}")
+        return jsonify({'error': 'Error interno del servidor'}), 500

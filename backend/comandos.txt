@@ -9,8 +9,6 @@ pip install python-dotenv
 pip install bcrypt
 pip install email-validator
 
-#pip install python-dateutil NOTE: No se usa
-
 #para crear la base de datos
 python scripts/init_db.py
 
